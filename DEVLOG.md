@@ -155,7 +155,10 @@ DAT1–DAT3 routing or pull-ups on the board are the first suspect.
   13.3.1, reports flash usage, warns if `prebuilt/` is stale, uploads the `.bin` as an artifact,
   and publishes a GitHub Release with the `.bin` for `v*` tags.
 - Open items moved to GitHub Issues (#1–#5).
-- `v0.3.0` tagged: reverb + mono/stereo + SD text presets, 1-bit SD. Marked pre-release until #1 is confirmed.
+- Releases: CI attaches `BluemchenFX.bin` to any release published in the GitHub UI (or to
+  pushed `v*` tags). Claude's sessions can't create tags or releases, so Jeff publishes them.
+  First one planned: `v0.3.0` (reverb + mono/stereo + SD text presets, 1-bit SD), as a
+  pre-release until #1 is confirmed.
 
 ---
 
