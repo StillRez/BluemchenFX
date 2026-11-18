@@ -1,9 +1,11 @@
 # CLAUDE.md — BluemchenFX
 
 Effect firmware for the **kxmx Bluemchen** (4HP Eurorack, Daisy Seed). Owner: StillRez
-(GitHub `StillRez`). **MIT licensed, meant to be fully open source.** It links
+(GitHub `StillRez`). In anything public (docs, commits, LICENSE) refer to the owner only as
+**StillRez**, never by legal name. Commit author: `StillRez`. **MIT licensed, meant to be fully open source.** It links
 DaisySP-LGPL (`ReverbSc`, LGPL-2.1), so the README's License section explains the LGPL terms. Keep
-new third-party code MIT-compatible and credit it in that table. Read `DEVLOG.md` for history and the reasoning behind decisions;
+new third-party code MIT-compatible and credit it in that table. Design docs live in `docs/design/`
+(effect chaining: `docs/design/effect-chaining.md`). Read `DEVLOG.md` for history and the reasoning behind decisions;
 open work is tracked in GitHub Issues.
 
 ## Hardware facts
