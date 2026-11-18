@@ -94,6 +94,6 @@ sd-card/BLUEMCHN/       example presets
 4. Add a dated entry to `DEVLOG.md`: what changed, why, and what's verified on hardware vs only
    compiled. Mark hardware confirmation as pending until Jeff reports back.
 5. Commit, push, and reference or close the relevant issue.
-6. Tag `vX.Y.Z` for builds Jeff flashes. CI attaches the `.bin` to a GitHub Release.
+6. Release builds Jeff flashes as `vX.Y.Z`: either push a tag, or create the release in GitHub (UI or `POST /repos/.../releases`). CI builds and attaches `BluemchenFX.bin` either way. Mark it pre-release until it's confirmed on hardware. (Claude's sandbox git proxy refuses tag pushes, so it uses the API route.)
 
 Things are only "verified" once Jeff has run them on the module. Say so explicitly otherwise.

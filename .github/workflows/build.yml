@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
+  release:
+    types: [published] # releases created in the GitHub UI or API (tag made server-side)
   pull_request:
   workflow_dispatch:
 
@@ -66,8 +68,14 @@ jobs:
           path: build/BluemchenFX.bin
 
       - name: Publish release (tags only)
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: build/BluemchenFX.bin
           generate_release_notes: true
+
+      - name: Attach firmware to published release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" build/BluemchenFX.bin --clobber
