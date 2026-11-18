@@ -243,7 +243,7 @@ Jeff's test results:
   Sound tuning is deferred to #7.
 - Delay presets switch effect, and SD slot pages show the effect type ✅
 - HOME page is readable but crowded with 6 bars. Jeff has more UI tweaks in mind (#8).
-- PING / ping-pong wasn't specifically reported, so it isn't confirmed on hardware yet.
+- PING / ping-pong works as expected ✅ (confirmed right after)
 
 Ready to release as **v0.4.0**.
 
