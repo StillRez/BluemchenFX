@@ -33,6 +33,12 @@ USE_DAISYSP_LGPL = 1
 APP_TYPE ?= BOOT_SRAM
 OPT      ?= -O2
 
+# Boot diagnostics: `make DIAG=1 BUILD_DIR=build-diag` blinks the Seed LED 3x
+# right after the chip is up and shows each startup step on the OLED.
+ifeq ($(DIAG),1)
+C_DEFS += -DBOOT_DIAG
+endif
+
 # Core location, and generic Makefile.
 SYSTEM_FILES_DIR = $(LIBDAISY_DIR)/core
 include $(SYSTEM_FILES_DIR)/Makefile

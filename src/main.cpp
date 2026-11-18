@@ -269,6 +269,28 @@ static bool ReadLegacySettings(app::Settings &out)
     return true;
 }
 
+// ---------------------------------------------------- boot diagnostics
+#ifdef BOOT_DIAG
+/** Show a startup step on the OLED (and blink once) so a hang can be
+ *  located on hardware without a debugger. Build with `make DIAG=1`. */
+static void Diag(const char *step)
+{
+    auto &d = hw.display;
+    d.Fill(false);
+    d.SetCursor(0, 0);
+    d.WriteString("BOOT DIAG", Font_6x8, true);
+    d.SetCursor(0, 14);
+    d.WriteString(step, Font_7x10, true);
+    d.Update();
+    hw.seed.SetLed(true);
+    System::Delay(250);
+    hw.seed.SetLed(false);
+    System::Delay(350);
+}
+#else
+static inline void Diag(const char *) {}
+#endif
+
 // ---------------------------------------------------------- main loop
 static void ResetKnobTakeover(int k)
 {
@@ -460,14 +482,18 @@ static void Splash()
 int main(void)
 {
     hw.Init(kBlockSize);
+    Diag("1 HW OK");
     for(auto *e : effects)
         e->Init(hw.SampleRate()); // also clears its SDRAM buffers
+    Diag("2 FX OK");
 
     // Load settings from QSPI: current layout, else migrate the v1
     // (single-effect) layout, else defaults.
     app::Settings migrated;
     const bool    have_v1 = ReadLegacySettings(migrated);
+    Diag(have_v1 ? "3a V1 FOUND" : "3a NO V1");
     storage.Init(MakeDefaults(), kFlashOffset);
+    Diag(SettingsValid(storage.GetSettings()) ? "3b SET OK" : "3b SET NEW");
     if(!SettingsValid(storage.GetSettings()))
     {
         if(have_v1)
@@ -481,6 +507,7 @@ int main(void)
         }
     }
     settings = &storage.GetSettings();
+    Diag("3c SETTINGS");
 
     // Start the active effect from its stored values (no glide at boot)
     {
@@ -492,12 +519,15 @@ int main(void)
     for(size_t i = 0; i < app::kMaxParams; i++)
         effective[i] = settings->Active().norm[i];
 
+    Diag("4 FX RESET");
     gui.Init(&hw.display, effects_const, FX_COUNT, settings);
     Splash();
     presets.Init(effects_const, FX_COUNT); // card is mounted on first use
+    Diag("5 SD INIT");
 
     hw.StartAdc();
     hw.StartAudio(AudioCallback);
+    Diag("6 AUDIO ON");
     System::Delay(20); // let the ADC filters settle
     ResetKnobTakeover(0);
     ResetKnobTakeover(1);

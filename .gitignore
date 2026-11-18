@@ -4,3 +4,4 @@ build/
 *.lst
 *.map
 .vscode/ipch
+build-diag/

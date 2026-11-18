@@ -295,6 +295,30 @@ presets load/save (the DMA-in-SDRAM change), audio/UI normal. Also check **boot 
 card inserted**: the bootloader scans the card with its own driver, and this board's 4-bit SD
 trouble could slow that scan.*
 
+## 2026-11-18 — Bootloader build doesn't start on hardware ❌ (investigating)
+
+**Symptom:** after `make program-boot` + `make program-dfu`, the Seed LED pulses briefly and then
+stays **solid on**. The OLED stays blank and there's no audio. Same with or without an SD card
+(so the bootloader's SD scan isn't the cause). We don't know yet whether it eventually starts.
+
+**Read through the bootloader source (electro-smith/DaisyBootloader) and libDaisy:**
+- The bootloader's SD scan uses 1-bit @ 12.5 MHz, the same mode that works on this board.
+- Its LED is solid only while a DFU download is in progress, and that flag is set only by
+  a QSPI erase from a real download.
+- Hand-over: it copies the full 480 KB program area from QSPI to SRAM, writes JUMP + address to
+  backup SRAM, resets the chip, then sets VTOR/MSP and jumps. The reset turns the LED off, and our
+  firmware never turns it on.
+- libDaisy (v6.x bootloader detected) still initialises QSPI, SDRAM and the LED for SRAM apps.
+  libDaisy's fault handlers just stop (`bkpt`), so a crash also freezes the LED.
+- OLED (blocking I2C), ADC/UART/audio (libDaisy DMA sections): no DTCM-DMA problem found.
+
+**Next step: diagnostics on the module.**
+- `tools/bootcheck/`: a minimal BOOT_SRAM program (3 quick LED blinks, then "BOOT OK" + counter
+  on the OLED). If it runs, the bootloader and hand-over are fine and the problem is ours.
+- `make DIAG=1 BUILD_DIR=build-diag`: the firmware blinks 3× right after `seed.Init`, keeps the
+  LED on until the OLED is up, then shows each startup step (`1 HW OK` … `6 AUDIO ON`).
+  The last step shown locates the hang.
+
 ---
 
 ## Open items

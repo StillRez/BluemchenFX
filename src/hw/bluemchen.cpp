@@ -18,12 +18,26 @@ void Hardware::Init(size_t block_size, SaiHandle::Config::SampleRate sr)
 {
     seed.Configure();
     seed.Init(true); // boost to 480 MHz
+#ifdef BOOT_DIAG
+    // 3 quick blinks: the chip is up and running our code
+    for(int i = 0; i < 3; i++)
+    {
+        seed.SetLed(true);
+        System::Delay(80);
+        seed.SetLed(false);
+        System::Delay(80);
+    }
+    seed.SetLed(true); // stays on until the OLED is up
+#endif
     seed.SetAudioBlockSize(block_size);
     seed.SetAudioSampleRate(sr);
 
     encoder.Init(kPinEncA, kPinEncB, kPinEncClick);
     InitControls();
     InitDisplay();
+#ifdef BOOT_DIAG
+    seed.SetLed(false);
+#endif
     InitMidi();
     InitDac();
 }
