@@ -233,3 +233,4 @@ Tracked as GitHub Issues:
 - #3 Add a LICENSE (note the DaisySP-LGPL reverb)
 - #4 Effect selector + second effect (delay): implemented, awaiting hardware test
 - #5 Flash headroom: plan the move to the Daisy bootloader
+- #6 Delay: tap tempo and/or MIDI clock sync
