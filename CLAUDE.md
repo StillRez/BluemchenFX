@@ -82,8 +82,10 @@ sd-card/BLUEMCHN/       example presets
   forward-compatible: unknown keys ignored, missing keys keep current values.
 - **Knob takeover:** knobs only take control after moving > 0.03; encoder edits, MIDI CC and
   preset loads disengage them.
-- The remote file bridge used to copy files to Jeff's PC refuses to write a file named
-  `Makefile`, so his non-git folder has `Makefile.in` and `setup.sh` copies it.
+- Jeff's working copy is a clone at `C:\Coding Projects\BluemchenFX` (Windows, Git Bash +
+  Daisy Toolchain). He gets changes with `git pull` (and `git submodule update --init --recursive`
+  if submodule pins change). The old non-git folder `C:\Coding Projects\Daisy effects module`
+  is retired. Don't write to it.
 
 ## Workflow
 
