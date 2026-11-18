@@ -27,8 +27,13 @@ git clone --recursive https://github.com/jeffreykrueger/BluemchenFX.git
 cd BluemchenFX
 ./setup.sh          # once: fetches libDaisy + DaisySP (pinned submodules) and builds them
 make                # builds build/BluemchenFX.bin
-make program-dfu    # flashes over USB (DFU mode)
+make program-dfu    # rebuilds if needed, then flashes over USB (DFU mode)
 ```
+
+`make program-dfu` usually ends with `Error during download get_status` / `Error 74` right after
+`File downloaded successfully`. That's harmless: the Daisy restarts into the new firmware before
+answering dfu-util's last status request. Check that the `size = …` it reports matches your new
+`build/BluemchenFX.bin`.
 
 ## Controls
 

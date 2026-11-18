@@ -50,9 +50,11 @@ make            # -> build/BluemchenFX.bin
 
 ## Flashing
 
-DFU: hold BOOT, tap RESET, then either `make program-dfu` or the Daisy Web Programmer
+DFU: hold BOOT, tap RESET, then either `make program-dfu` (the project Makefile makes it rebuild
+first; libDaisy's own target doesn't, which once flashed stale firmware) or the Daisy Web Programmer
 (https://flash.daisy.audio/, choose "DFU in FS Mode", not "Daisy Bootloader"). On Windows,
-Zadig/WinUSB may be needed once.
+Zadig/WinUSB may be needed once. dfu-util's trailing `Error during download get_status` /
+make `Error 74` after "File downloaded successfully" is normal: the Daisy resets because of `:leave`.
 
 ## Code map
 

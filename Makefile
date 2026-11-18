@@ -30,3 +30,7 @@ OPT = -Os
 # Core location, and generic Makefile.
 SYSTEM_FILES_DIR = $(LIBDAISY_DIR)/core
 include $(SYSTEM_FILES_DIR)/Makefile
+
+# Always (re)build before flashing: libDaisy's program targets only flash
+# whatever is already in build/, which silently flashes stale firmware.
+program-dfu program program-boot: all
