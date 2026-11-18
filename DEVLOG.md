@@ -146,7 +146,7 @@ DAT1–DAT3 routing or pull-ups on the board are the first suspect.
 
 ## 2026-11-18 — Project infrastructure
 
-- Code is on GitHub (github.com/jeffreykrueger/BluemchenFX), with libDaisy / DaisySP / DaisySP-LGPL
+- Code is on GitHub (github.com/StillRez/BluemchenFX), with libDaisy / DaisySP / DaisySP-LGPL
   pinned as submodules. A fresh `git clone --recursive` + `setup.sh` + `make` reproduced
   `prebuilt/BluemchenFX.bin` byte for byte.
 - `CLAUDE.md` holds the hardware facts, build quirks, conventions and workflow, so a new
@@ -156,22 +156,22 @@ DAT1–DAT3 routing or pull-ups on the board are the first suspect.
   and publishes a GitHub Release with the `.bin` for `v*` tags.
 - Open items moved to GitHub Issues (#1–#5).
 - Releases: CI attaches `BluemchenFX.bin` to any release published in the GitHub UI (or to
-  pushed `v*` tags). Claude's sessions can't create tags or releases, so Jeff publishes them.
+  pushed `v*` tags). Claude's sessions can't create tags or releases, so StillRez publishes them.
   First one planned: `v0.3.0` (reverb + mono/stereo + SD text presets, 1-bit SD), as a
   pre-release until #1 is confirmed.
 
 ## 2026-11-18 — v0.3.0 released; fast SD mount confirmed ✅
 
-- Jeff published `v0.3.0` in the GitHub UI. The release workflow built and attached
+- StillRez published `v0.3.0` in the GitHub UI. The release workflow built and attached
   `BluemchenFX.bin` automatically, so the release path works end to end.
 - Flashed on the module: with the 1-bit-only SD build, the first SD access is near-instant
   (was ~3 minutes). Closes #1.
 - Everything in v0.3.0 is now verified on hardware: reverb, UI, knobs/CV, mono/stereo, SD
   load/save/overwrite, hot insertion, fast mount.
 
-## 2026-11-18 — Local build on Jeff's PC
+## 2026-11-18 — Local build on StillRez's PC
 
-- Jeff cloned the repo to `C:\Coding Projects\BluemchenFX`, ran `setup.sh` and `make`
+- StillRez cloned the repo to `C:\Coding Projects\BluemchenFX`, ran `setup.sh` and `make`
   successfully with the Daisy Toolchain.
 - His compiler is GCC 10.2.1 (10-2020-q4) vs 13.3.1 in CI, so his bin isn't byte-identical:
   113,908 bytes (86.9 % flash) vs 112,244. Same source, and the memory layout is correct
@@ -234,7 +234,7 @@ harmless (the device resets because of `:leave`) and is now documented.
 
 ## 2026-11-18 — Delay + effect selector verified on hardware ✅ (closes #4)
 
-Jeff's test results:
+StillRez's test results:
 - v0.3.0 → v2 settings migration: reverb values, routing and input mode carried over ✅
 - Switching REVERB ↔ DELAY; each effect keeps its own parameters ✅
 - TIME changes don't click; echoes already in the buffer pitch-shift as the time changes, which is
@@ -242,15 +242,15 @@ Jeff's test results:
 - High FEEDBK doesn't run away ✅, but it doesn't really saturate either. It stays fairly clean.
   Sound tuning is deferred to #7.
 - Delay presets switch effect, and SD slot pages show the effect type ✅
-- HOME page is readable but crowded with 6 bars. Jeff has more UI tweaks in mind (#8).
+- HOME page is readable but crowded with 6 bars. StillRez has more UI tweaks in mind (#8).
 - PING / ping-pong works as expected ✅ (confirmed right after)
 
 Ready to release as **v0.4.0**.
 
 ## 2026-11-18 — License: MIT (closes #3)
 
-- Jeff wants the project fully open source and chose **MIT** (over GPL-3.0), matching
-  kxmx_bluemchen, libDaisy and DaisySP. `LICENSE` © 2026 Jeff Krueger.
+- StillRez wants the project fully open source and chose **MIT** (over GPL-3.0), matching
+  kxmx_bluemchen, libDaisy and DaisySP. `LICENSE` © 2026 StillRez.
 - README has a License section crediting libDaisy (MIT), DaisySP (MIT), DaisySP-LGPL (LGPL-2.1,
   `ReverbSc`) and kxmx_bluemchen (MIT, the pin map basis, also credited in `src/hw/bluemchen.h`).
 - LGPL note: ReverbSc is statically linked, so the released `.bin` contains LGPL-2.1 code. That's
@@ -259,10 +259,10 @@ Ready to release as **v0.4.0**.
 
 ## 2026-11-18 — Daisy bootloader: run from SRAM (#5)
 
-Jeff plans more complex effects and effect chaining, and internal flash was at 92 %.
+StillRez plans more complex effects and effect chaining, and internal flash was at 92 %.
 
 **Change:** `APP_TYPE = BOOT_SRAM` with the Daisy bootloader v6.4 (`intdfu-2000ms`, the one libDaisy
-ships and Jeff already has). The app is stored in QSPI at `0x90040000` and copied to AXI SRAM at boot.
+ships and StillRez already has). The app is stored in QSPI at `0x90040000` and copied to AXI SRAM at boot.
 - Code: **131 KB of 480 KB SRAM (27 %)** at `-O2`, so the size tricks went away: project `OPT`
   back to `-O2`, and the `#pragma GCC optimize("O2")` lines removed from the DSP files.
   libDaisy stays `-Os` (HAL code, not performance-critical, no rebuild needed).
@@ -333,7 +333,7 @@ stays **solid on**. The OLED stays blank and there's no audio. Same with or with
 
 ## 2026-11-18 — Bootloader build verified on hardware ✅ (closes #5)
 
-Normal build flashed through the Daisy bootloader. Jeff's checklist all passed:
+Normal build flashed through the Daisy bootloader. StillRez's checklist all passed:
 - Saved settings carried over (both effects, routing, input mode) ✅
 - Saving (long press) persists across a power cycle ✅
 - SD presets load and save, with the FatFS/DMA buffers now in SDRAM ✅
@@ -349,7 +349,7 @@ Ready to release as **v0.5.0**: the first release that requires the Daisy bootlo
 
 Docs only. **No code changed, nothing compiled or verified on hardware.**
 
-- Jeff's decisions: up to 4 serial slots, repeats allowed, parallel routing later, long press
+- StillRez's decisions: up to 4 serial slots, repeats allowed, parallel routing later, long press
   = back, and the planned effect families (modulation, filters/drive, pitch/granular,
   looper/sampler, wavefolders, dynamics, SR/bit reduction).
 - Wrote `docs/design/effect-chaining.md`, covering:
@@ -361,7 +361,7 @@ Docs only. **No code changed, nothing compiled or verified on hardware.**
   - the hierarchical UI (folds in #8), the CC map 20 + 8·slot + param, and a CPU meter;
   - a host test harness and a phased plan.
 - Open questions Q1–Q5 (arena sizes, param recall, partial presets, CPU overload policy,
-  bypass default) need Jeff's answers before phase 1. Phase 0 (CPU meter + host tests) doesn't
+  bypass default) need StillRez's answers before phase 1. Phase 0 (CPU meter + host tests) doesn't
   depend on them.
 
 ---

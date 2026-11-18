@@ -2,7 +2,7 @@
 
 Status: **draft for review**. Nothing here is implemented yet. Date: 2026-11-18.
 
-## Decisions already made (Jeff, 2026-11-18)
+## Decisions already made (StillRez, 2026-11-18)
 
 | Question | Answer |
 |---|---|
@@ -242,7 +242,7 @@ unmodified.
 
 ## 7. Phased plan
 
-Each phase is one or more commits and ends with a hardware check by Jeff.
+Each phase is one or more commits and ends with a hardware check by StillRez.
 
 | Phase | Work | Hardware check |
 |---|---|---|

@@ -1,7 +1,7 @@
 # CLAUDE.md — BluemchenFX
 
-Effect firmware for the **kxmx Bluemchen** (4HP Eurorack, Daisy Seed). Owner: Jeff Krueger
-(GitHub `jeffreykrueger`). **MIT licensed, meant to be fully open source.** It links
+Effect firmware for the **kxmx Bluemchen** (4HP Eurorack, Daisy Seed). Owner: StillRez
+(GitHub `StillRez`). **MIT licensed, meant to be fully open source.** It links
 DaisySP-LGPL (`ReverbSc`, LGPL-2.1), so the README's License section explains the LGPL terms. Keep
 new third-party code MIT-compatible and credit it in that table. Read `DEVLOG.md` for history and the reasoning behind decisions;
 open work is tracked in GitHub Issues.
@@ -28,16 +28,16 @@ rewritten for current libDaisy in `src/hw/bluemchen.*`.
 ## Build
 
 ```
-git clone --recursive https://github.com/jeffreykrueger/BluemchenFX.git
+git clone --recursive https://github.com/StillRez/BluemchenFX.git
 ./setup.sh      # builds lib/libDaisy with OPT=-Os, then lib/DaisySP (+ DaisySP-LGPL)
 make            # -> build/BluemchenFX.bin
 ```
 
 - Toolchain: arm-none-eabi-gcc. CI and `prebuilt/` use xPack **13.3.1-1.1** (112,244-byte bin
-  at v0.3.0). Jeff's Daisy Toolchain on Windows is **GCC 10.2.1 (10-2020-q4)** and produces a
+  at v0.3.0). StillRez's Daisy Toolchain on Windows is **GCC 10.2.1 (10-2020-q4)** and produces a
   slightly larger, not byte-identical bin (113,908 bytes, 86.9 %). Check flash headroom against
   the larger of the two. Release binaries come from CI.
-- Line endings: `.gitattributes` keeps `*.sh` and `Makefile` LF everywhere. Jeff's clone uses
+- Line endings: `.gitattributes` keeps `*.sh` and `Makefile` LF everywhere. StillRez's clone uses
   Git for Windows' CRLF conversion for other text files.
 - **Memory budget (BOOT_SRAM, the default):** code + rodata in AXI SRAM, **480 KB** (131 KB used,
   27 %, at `-O2`). `.data`/`.bss` + stack in **DTCM, 128 KB** (57 KB used); the stack grows down
@@ -121,7 +121,7 @@ sd-card/BLUEMCHN/       example presets
 - **Hardware debugging without a debugger:** `make DIAG=1 BUILD_DIR=build-diag` (LED blinks after
   `seed.Init`, OLED shows each startup step via `Diag()` in `main.cpp`); `tools/bootcheck` is a
   minimal BOOT_SRAM program to test the bootloader path on its own.
-- Jeff's working copy is a clone at `C:\Coding Projects\BluemchenFX` (Windows, Git Bash +
+- StillRez's working copy is a clone at `C:\Coding Projects\BluemchenFX` (Windows, Git Bash +
   Daisy Toolchain). He gets changes with `git pull` (and `git submodule update --init --recursive`
   if submodule pins change). The old non-git folder `C:\Coding Projects\Daisy effects module`
   is retired. Don't write to it.
@@ -133,8 +133,8 @@ sd-card/BLUEMCHN/       example presets
    with plain g++).
 3. Update `prebuilt/BluemchenFX.bin` if the firmware changed.
 4. Add a dated entry to `DEVLOG.md`: what changed, why, and what's verified on hardware vs only
-   compiled. Mark hardware confirmation as pending until Jeff reports back.
+   compiled. Mark hardware confirmation as pending until StillRez reports back.
 5. Commit, push, and reference or close the relevant issue.
-6. Release builds Jeff flashes as `vX.Y.Z`: either push a tag, or create the release in GitHub (UI or `POST /repos/.../releases`). CI builds and attaches `BluemchenFX.bin` either way. Mark it pre-release until it's confirmed on hardware. Claude's cloud sessions can't push tags or create releases, so Jeff publishes releases in the GitHub UI (Releases → Draft a new release → new tag). Claude can draft the release notes.
+6. Release builds StillRez flashes as `vX.Y.Z`: either push a tag, or create the release in GitHub (UI or `POST /repos/.../releases`). CI builds and attaches `BluemchenFX.bin` either way. Mark it pre-release until it's confirmed on hardware. Claude's cloud sessions can't push tags or create releases, so StillRez publishes releases in the GitHub UI (Releases → Draft a new release → new tag). Claude can draft the release notes.
 
-Things are only "verified" once Jeff has run them on the module. Say so explicitly otherwise.
+Things are only "verified" once StillRez has run them on the module. Say so explicitly otherwise.

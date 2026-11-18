@@ -1,6 +1,6 @@
 # BluemchenFX
 
-[![Build firmware](https://github.com/jeffreykrueger/BluemchenFX/actions/workflows/build.yml/badge.svg)](https://github.com/jeffreykrueger/BluemchenFX/actions/workflows/build.yml)
+[![Build firmware](https://github.com/StillRez/BluemchenFX/actions/workflows/build.yml/badge.svg)](https://github.com/StillRez/BluemchenFX/actions/workflows/build.yml)
 
 Clean-slate effect firmware for the **kxmx Bluemchen** (Daisy Seed, 4HP), built on current
 [libDaisy](https://github.com/electro-smith/libDaisy) and [DaisySP](https://github.com/electro-smith/DaisySP).
@@ -35,7 +35,7 @@ pulse continues indefinitely, waiting for you. (Pressing BOOT *during* RESET ins
 STM system DFU mode, which can't load this firmware.) Then either:
 - `make program-dfu` (builds first if needed), or
 - in the [Daisy Web Programmer](https://flash.daisy.audio/), connect to **Daisy Bootloader** and
-  flash `prebuilt/BluemchenFX.bin` or the `.bin` from a [release](https://github.com/jeffreykrueger/BluemchenFX/releases).
+  flash `prebuilt/BluemchenFX.bin` or the `.bin` from a [release](https://github.com/StillRez/BluemchenFX/releases).
 
 From then on, every power-up spends ~2 seconds in the bootloader (LED pulsing) before
 BluemchenFX starts.
@@ -56,7 +56,7 @@ BluemchenFX starts.
 **Build from source** (needs the [Daisy Toolchain](https://github.com/electro-smith/DaisyWiki/wiki/1.-Setting-Up-Your-Development-Environment); on Windows use Git Bash):
 
 ```
-git clone --recursive https://github.com/jeffreykrueger/BluemchenFX.git
+git clone --recursive https://github.com/StillRez/BluemchenFX.git
 cd BluemchenFX
 ./setup.sh          # once: fetches libDaisy + DaisySP (pinned submodules) and builds them
 make                # builds build/BluemchenFX.bin
