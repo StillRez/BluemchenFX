@@ -61,7 +61,7 @@ Two levels:
    *while it pulses* (rapid blinks, then it keeps pulsing). BOOT held during RESET = STM system DFU
    instead, which can't take a BOOT_SRAM app: the web programmer then says "incompatible binary",
    and a mis-flash leaves the bootloader with no program (LED pulses then goes solid, OLED blank).
-   That's exactly what happened on the first v0.5.0 attempt. Then then `make program-dfu` (the project Makefile makes it rebuild first; libDaisy's own
+   That's exactly what happened on the first v0.5.0 attempt. Then flash with `make program-dfu` (the project Makefile makes it rebuild first; libDaisy's own
    target doesn't, which once flashed stale firmware), or the web programmer's "Daisy Bootloader"
    with the `.bin`.
 On Windows, Zadig/WinUSB may be needed once. dfu-util's trailing `Error during download get_status` /
