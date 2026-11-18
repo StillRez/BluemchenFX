@@ -127,6 +127,15 @@ At 48 kHz with 32-sample blocks, the callback has **667 µs** per block.
   chains fit.
 - **Overload policy:** warn only. If peak load passes ~95%, the CPU bar inverts and the setup
   page shows `CPU!`. Nothing is refused or auto-bypassed; the user stays in control.
+- **Cost table** (fill in from the CPU page as effects are measured on the module; the host
+  column is µs per 32-sample block on a PC, from `make -C tests run`, only a relative hint):
+
+  | Effect | Module avg / peak (single effect, defaults) | Host µs/block |
+  |---|---|---|
+  | (none: dry passthrough, controls, meters) | *pending* | – |
+  | REVERB | *pending* | 2.3 |
+  | DELAY | *pending* | 5.9 |
+
 - Cheap effects (filters, drive, wavefolder, bit/SR reduction, dynamics, tremolo/chorus)
   should cost only a few percent each. The ones to measure before promising anything are
   reverb (ReverbSc), pitch shifting and granular. The block size stays at 32 unless
@@ -259,7 +268,7 @@ Each phase is one or more commits and ends with a hardware check by StillRez.
 
 | Phase | Work | Hardware check |
 |---|---|---|
-| 0 | CPU meter + host test harness in CI. No behaviour change. | CPU % shown, reverb/delay costs recorded |
+| 0 | CPU meter + host test harness in CI. No behaviour change. **Done in code (2026-11-18)**, hardware check pending. | CPU % shown, reverb/delay costs recorded |
 | 1 | Arena + per-slot instances, chain engine, settings v3 + migration. The UI temporarily edits slot 1 only. | Old settings come back in slot 1; no clicks on bypass/swap |
 | 2 | Hierarchical UI: HOME overview, slot pages, setup menu, long press = back. | Build a 2–4 slot chain from the panel; closes #8 |
 | 3 | Chain presets + CC map | Old and new presets load; MIDI CCs reach slots 2–4 |

@@ -82,6 +82,8 @@ src/app/settings.h      persisted POD struct v2: active effect + per-effect Effe
 src/app/preset_text.*   preset text format (hardware-independent, host-testable)
 src/app/preset_store.*  SD mount + slot files (FatFS)
 sd-card/BLUEMCHN/       example presets
+tests/                  host tests: `make -C tests run` (DSP stability, presets); CI gates the build on them
+docs/design/            design docs (effect chaining plan, phases 0-4)
 ```
 
 ## Conventions and gotchas
@@ -90,7 +92,10 @@ sd-card/BLUEMCHN/       example presets
   pages, knob/CV routing, MIDI CC (20+n) and preset keys are generated from it. Max 8 params.
   Header names can be up to 7 chars. Register by **appending** to `EffectId` / `effects[]` in
   `main.cpp`: the index is persisted, so never reorder. Presets refer to effects by `Name()`.
-  Up to `kMaxEffects` = 4 without a layout change.
+  Up to `kMaxEffects` = 4 without a layout change. Add it to `tests/test_effects.cpp` too.
+- **CPU load:** the CPU page shows the audio callback's average and peak load (libDaisy
+  `CpuLoadMeter` around the whole callback; peak ignores the first 2 s after boot). Measure new
+  effects there and record them in the cost table in `docs/design/effect-chaining.md`.
 - **Effect switching** goes through `ApplySettings()` in `main.cpp`: it sets `switching` (audio
   callback passes dry), waits 2 ms, pushes params, calls `Reset()` on the incoming effect,
   swaps settings, then clears `switching`. Never change `settings->effect` any other way.
@@ -131,8 +136,9 @@ sd-card/BLUEMCHN/       example presets
 ## Workflow
 
 1. Make the change. Build locally if a toolchain is available, and check flash usage.
-2. Test hardware-independent code on the host where possible (e.g. `preset_text.cpp` builds
-   with plain g++).
+2. Run `make -C tests run` (host tests: every effect at extreme/random settings must stay finite
+   and its tail must decay; Reset() must silence it; presets round-trip). New effects go in the
+   list at the top of `tests/test_effects.cpp`. Add tests for new hardware-independent code.
 3. Update `prebuilt/BluemchenFX.bin` if the firmware changed.
 4. Add a dated entry to `DEVLOG.md`: what changed, why, and what's verified on hardware vs only
    compiled. Mark hardware confirmation as pending until StillRez reports back.

@@ -9,6 +9,7 @@
  *   K1 / K2       route knob 1 / knob 2 to a parameter (absolute control)
  *   CV1 / CV2     route CV 1 / CV 2 to a parameter (bipolar offset)
  *   INPUT         STEREO, or MONO (left input copied to right)
+ *   CPU           audio callback load: average and peak (click resets peak)
  *   LOAD SD       pick a preset slot (1..99) on the SD card and load it
  *   SAVE SD       pick a slot and write the current setup to it
  *   SAVE          store settings to internal flash (power-up state)
@@ -68,6 +69,14 @@ class Ui
      *  Used slot: `text` = preset name, `detail` = its effect name.
      *  Otherwise: `text` = status, `detail` = error code (bottom line). */
     void SetSdSlotInfo(int slot, bool used, const char *text, const char *detail);
+    /** CPU load of the audio callback, 0..1 (average, peak since reset). */
+    void SetCpuLoad(float avg, float peak)
+    {
+        cpu_avg_  = avg;
+        cpu_peak_ = peak;
+    }
+    /** True once after the user asked to reset the CPU peak. */
+    bool TakeCpuReset();
     /** Immediately draw a full-screen message (for blocking operations). */
     void ShowBusy(const char *msg);
 
@@ -84,6 +93,7 @@ class Ui
         PAGE_PARAM,
         PAGE_ROUTE,
         PAGE_INPUT,
+        PAGE_CPU,
         PAGE_SD_LOAD,
         PAGE_SD_SAVE,
         PAGE_SAVE,
@@ -100,6 +110,7 @@ class Ui
     void   DrawParam(size_t idx, const float *eff, bool editing);
     void   DrawRoute(size_t src, bool editing);
     void   DrawInput(bool editing);
+    void   DrawCpu();
     void   DrawEffect(bool editing);
     const fx::Effect       &Fx() const { return *effects_[settings_->effect]; }
     app::EffectState       &St() { return settings_->Active(); }
@@ -132,6 +143,9 @@ class Ui
     uint32_t    flash_until_ = 0;
 
     bool save_request_  = false;
+    bool cpu_reset_     = false;
+    float cpu_avg_      = 0.f;
+    float cpu_peak_     = 0.f;
     int  edited_param_  = -1;
     bool route_changed_ = false;
 

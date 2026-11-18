@@ -37,8 +37,8 @@ void Ui::Init(bluemchen::Hardware::Display *display,
 // ---------------------------------------------------------------- pages
 int Ui::NumPages() const
 {
-    // HOME + EFFECT + params + routes + INPUT + LOAD SD + SAVE SD + SAVE
-    return 2 + (int)Fx().NumParams() + app::SRC_LAST + 4;
+    // HOME + EFFECT + params + routes + INPUT + CPU + LOAD SD + SAVE SD + SAVE
+    return 2 + (int)Fx().NumParams() + app::SRC_LAST + 5;
 }
 
 Ui::Page Ui::PageAt(int p) const
@@ -57,8 +57,10 @@ Ui::Page Ui::PageAt(int p) const
     if(k == 1)
         return {PAGE_INPUT, 0};
     if(k == 2)
-        return {PAGE_SD_LOAD, 0};
+        return {PAGE_CPU, 0};
     if(k == 3)
+        return {PAGE_SD_LOAD, 0};
+    if(k == 4)
         return {PAGE_SD_SAVE, 0};
     return {PAGE_SAVE, 0};
 }
@@ -165,6 +167,7 @@ void Ui::OnClick(uint32_t now_ms)
                 effect_request_ = pending_effect_;
             editing_ = !editing_;
             break;
+        case PAGE_CPU: cpu_reset_ = true; break; // clear the peak
         case PAGE_SAVE:
             save_request_ = true;
             Flash("SAVED", now_ms);
@@ -258,6 +261,13 @@ int Ui::TakeEffectRequest()
     return r;
 }
 
+bool Ui::TakeCpuReset()
+{
+    bool r     = cpu_reset_;
+    cpu_reset_ = false;
+    return r;
+}
+
 bool Ui::TakeRouteChanged()
 {
     bool r         = route_changed_;
@@ -299,6 +309,7 @@ void Ui::Draw(const float *eff, float meter_in, float meter_out, uint32_t now_ms
             case PAGE_PARAM: DrawParam(pg.index, eff, editing_); break;
             case PAGE_ROUTE: DrawRoute(pg.index, editing_); break;
             case PAGE_INPUT: DrawInput(editing_); break;
+            case PAGE_CPU: DrawCpu(); break;
             case PAGE_SD_LOAD: DrawSd(true, editing_); break;
             case PAGE_SD_SAVE: DrawSd(false, editing_); break;
             case PAGE_SAVE: DrawSave(editing_); break;
@@ -411,6 +422,24 @@ void Ui::DrawInput(bool editing)
     disp_->WriteString(mono ? "MONO" : "STEREO", Font_7x10, true);
     disp_->SetCursor(0, 25);
     disp_->WriteString(mono ? "L in -> L+R" : "L->L  R->R", Font_4x6, true);
+}
+
+void Ui::DrawCpu()
+{
+    // Average load large, peak (since the last reset) underneath.
+    // Peak >= 95 % inverts the header: the audio deadline is close.
+    const int avg  = (int)(cpu_avg_ * 100.f + 0.5f);
+    const int peak = (int)(cpu_peak_ * 100.f + 0.5f);
+    DrawHeader("CPU", peak >= 95, nullptr);
+
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%d%%", avg);
+    disp_->SetCursor(0, 8);
+    disp_->WriteString(buf, Font_11x18, true);
+
+    snprintf(buf, sizeof(buf), "pk %d%% push:clr", peak);
+    disp_->SetCursor(0, 26);
+    disp_->WriteString(buf, Font_4x6, true);
 }
 
 void Ui::DrawSd(bool load, bool editing)

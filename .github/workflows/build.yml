@@ -13,7 +13,19 @@ permissions:
   contents: write # needed to publish releases on tags
 
 jobs:
+  host-tests:
+    # DSP stability + preset format tests on the PC (tests/README.md)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build and run host tests
+        run: make -C tests -j"$(nproc)" run
+
   build:
+    needs: host-tests # no firmware (or release) if the DSP/preset tests fail
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

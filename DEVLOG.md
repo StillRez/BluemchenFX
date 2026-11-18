@@ -380,6 +380,49 @@ StillRez's answers, now in `docs/design/effect-chaining.md`:
 
 The design is approved. Next: phase 0 (CPU meter + host test harness).
 
+
+## 2026-11-18 — Phase 0: CPU meter + host test harness
+
+The first step of the effect-chaining plan (`docs/design/effect-chaining.md`). No change to the
+sound.
+
+**CPU meter (firmware)**
+- libDaisy `CpuLoadMeter` wraps the whole audio callback (controls, encoder, effect, meters).
+- New **CPU** page after INPUT shows:
+  - the average load (large);
+  - `pk` = peak since the last reset. Click resets it.
+  - The header inverts when the peak reaches 95 %.
+- The peak resets once 2 s after boot, so start-up blocks don't count.
+- The numbers go into a cost table in the design doc. They decide how many heavy effects fit in a
+  chain.
+
+**Host tests (`tests/`, `make -C tests run`, ~15 s)**
+- Effects and preset code are built with the PC's g++ against DaisySP / DaisySP-LGPL, with stubs
+  standing in for libDaisy.
+- Every effect is tested at defaults, all-min, all-max and random settings. Each setting gets an
+  impulse, full-scale noise, sine and square, then silence. The output must stay finite and
+  bounded, and its **tail must decay**.
+  - The first version (with a plain "peak < 8" bound) flagged the reverb at a 30 s decay
+    reaching 8.5 with 2 s of full-scale square in. That's energy piling up in a long tank, not
+    instability. On the module it would just clip at the DAC.
+  - The decay rule distinguishes the two. Sanity check: a delay deliberately allowed 130 %
+    feedback fails it, even though the soft clipper keeps it bounded.
+- Other tests: parameters jumping every block for 20 s; `Reset()` must give silence; parameter
+  tables are sane.
+- Presets: all 9 example files parse with no errors. Random states round-trip through text to
+  the text's resolution, and re-serializing gives identical text. Junk lines are ignored safely.
+- CI has a new `host-tests` job. The firmware build (and so any release) now waits for it to
+  pass.
+- Host cost hint, µs per 32-sample block on a PC: reverb 2.3, delay 5.9. The delay's per-sample
+  time glide makes it the more expensive of the two.
+
+*Status: host tests pass locally (9 tests, 6304 checks). Firmware compiles: SRAM 131,916 B
+(26.8 %), DTCM 43.6 %. `prebuilt/` updated. **Not yet run on hardware.** To check on the module:*
+- *the CPU page appears after INPUT and shows plausible numbers;*
+- *click resets the peak;*
+- *record the average/peak for REVERB and DELAY at their default settings;*
+- *everything else behaves as before.*
+
 ---
 
 ## Open items

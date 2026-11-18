@@ -21,6 +21,7 @@
 #include "daisy_seed.h"
 #include "per/qspi.h"
 #include "util/PersistentStorage.h"
+#include "util/CpuLoadMeter.h"
 
 #include "hw/bluemchen.h"
 #include "fx/reverb.h"
@@ -43,6 +44,7 @@ static constexpr float    kCvDeadband    = 0.02f;
 static constexpr float    kKnobEngage    = 0.03f;
 static constexpr uint8_t  kMidiCcBase    = 20;
 static constexpr uint32_t kDisplayPeriod = 33; // ms (~30 fps)
+static constexpr uint32_t kCpuPeakSettle = 2000; // ms: ignore start-up blocks in the peak
 
 // ------------------------------------------------------------ effects
 // The index is persisted (Settings::effect) and written to nothing else:
@@ -108,10 +110,15 @@ static inline float PeakFollow(float env, const float *buf, size_t n)
     return pk > env ? pk : env * 0.97f;
 }
 
+// Whole-callback CPU load: average (smoothed) and peak since last reset.
+// Written by the audio ISR, read and reset by the main loop.
+static CpuLoadMeter cpu_meter;
+
 static void AudioCallback(AudioHandle::InputBuffer  in,
                           AudioHandle::OutputBuffer out,
                           size_t                    size)
 {
+    cpu_meter.OnBlockStart();
     hw.ProcessAllControls();
 
     // Encoder events must be sampled at the debounce rate
@@ -172,6 +179,7 @@ static void AudioCallback(AudioHandle::InputBuffer  in,
 
     meter_in  = PeakFollow(meter_in, in[0], size);
     meter_out = PeakFollow(meter_out, out[0], size);
+    cpu_meter.OnBlockEnd();
 }
 
 // ----------------------------------------------------------- settings
@@ -526,6 +534,7 @@ int main(void)
     Diag("5 SD INIT");
 
     hw.StartAdc();
+    cpu_meter.Init(hw.SampleRate(), (int)kBlockSize);
     hw.StartAudio(AudioCallback);
     Diag("6 AUDIO ON");
     System::Delay(20); // let the ADC filters settle
@@ -533,6 +542,7 @@ int main(void)
     ResetKnobTakeover(1);
 
     uint32_t last_draw   = 0;
+    bool     cpu_settled = false;
     uint32_t clicks_seen = 0, longs_seen = 0;
     int32_t  enc_seen    = 0;
 
@@ -576,6 +586,15 @@ int main(void)
             storage.Save();
 
         // ---- display
+        // ---- CPU meter: drop start-up blocks from the peak once, and
+        //      reset the peak when asked from the CPU page
+        if((!cpu_settled && now >= kCpuPeakSettle) || gui.TakeCpuReset())
+        {
+            cpu_settled = true;
+            cpu_meter.Reset();
+        }
+        gui.SetCpuLoad(cpu_meter.GetAvgCpuLoad(), cpu_meter.GetMaxCpuLoad());
+
         if(now - last_draw >= kDisplayPeriod)
         {
             last_draw = now;

@@ -95,9 +95,11 @@ Moving a knob or sending a CC briefly pops up that parameter's page.
 3. **Parameter pages** for the active effect (see below)
 4. **KNOB 1 / KNOB 2 / CV 1 / CV 2** – choose which parameter each source controls (or `--`)
 5. **INPUT** – STEREO / MONO (click, turn to change, click to confirm; saved with the other settings)
-6. **LOAD SD** – click, turn to pick a slot (01–99), click again to load it
-7. **SAVE SD** – click, turn to pick a slot, click again to write the current setup to it
-8. **SAVE** – store the current setup to internal flash as the power-up state
+6. **CPU** – audio processing load: average (large) and peak since the last reset (`pk`). Click
+   resets the peak. The header inverts when the peak reaches 95 %, i.e. close to dropouts.
+7. **LOAD SD** – click, turn to pick a slot (01–99), click again to load it
+8. **SAVE SD** – click, turn to pick a slot, click again to write the current setup to it
+9. **SAVE** – store the current setup to internal flash as the power-up state
 
 ### Reverb parameters
 
@@ -202,7 +204,13 @@ src/
   app/preset_text.*   preset text format: write + parse (no hardware deps)
   app/preset_store.*  SD card mount + slot files (FatFS)
 sd-card/BLUEMCHN/     example presets to copy to the card
+tests/                host-side tests (DSP stability, preset format); see tests/README.md
+docs/design/          design documents (effect chaining)
 ```
+
+**Tests:** `make -C tests run` builds the effects and the preset code with your normal PC
+compiler and checks them (no hardware needed; on Windows this needs a native `g++`, e.g. from
+MSYS2). CI runs them on every push and won't build firmware if they fail.
 
 ### Adding another effect
 
@@ -211,7 +219,8 @@ process audio in `Process`, and clear buffers in `Reset`. Then **append** it to 
 `effects[]` in `main.cpp` (never reorder: the index is saved in flash) and give it default
 routing in `MakeDefaults()`. The EFFECT page, parameter pages, knob/CV routing, MIDI CCs, presets
 and flash storage all follow from the parameter table (up to 8 parameters, up to 4 effects
-before `kMaxEffects` must grow, which is a settings layout change).
+before `kMaxEffects` must grow, which is a settings layout change). Also add it to the effect
+list at the top of `tests/test_effects.cpp`, so CI checks it for stability.
 
 ## License
 
