@@ -140,7 +140,7 @@ The 4-bit entry is left documented in `preset_store.cpp` for anyone who wants to
 (it must go *after* the 1-bit entry). The cause of the 4-bit failure isn't known.
 DAT1–DAT3 routing or pull-ups on the board are the first suspect.
 
-*Pending: confirmation on hardware that the first mount is now fast.*
+*Confirmed on hardware later the same day (see below).*
 
 ---
 
@@ -160,12 +160,21 @@ DAT1–DAT3 routing or pull-ups on the board are the first suspect.
   First one planned: `v0.3.0` (reverb + mono/stereo + SD text presets, 1-bit SD), as a
   pre-release until #1 is confirmed.
 
+## 2026-11-18 — v0.3.0 released; fast SD mount confirmed ✅
+
+- Jeff published `v0.3.0` in the GitHub UI. The release workflow built and attached
+  `BluemchenFX.bin` automatically, so the release path works end to end.
+- Flashed on the module: with the 1-bit-only SD build, the first SD access is near-instant
+  (was ~3 minutes). Closes #1.
+- Everything in v0.3.0 is now verified on hardware: reverb, UI, knobs/CV, mono/stereo, SD
+  load/save/overwrite, hot insertion, fast mount.
+
 ---
 
 ## Open items
 
 Tracked as GitHub Issues:
-- #1 Confirm the SD card mounts quickly with the 1-bit-only build
+- ~~#1 Confirm the SD card mounts quickly with the 1-bit-only build~~ (done)
 - #2 Investigate why 4-bit SD transfers fail on the Bluemchen
 - #3 Add a LICENSE (note the DaisySP-LGPL reverb)
 - #4 Effect selector + second effect (e.g. delay)

@@ -16,7 +16,7 @@ Verified on the module unless noted.
 | CV 1 / 2 | D21 / D18 (`flip = true`, inverting stage, mapped to -1..+1) |
 | OLED | SSD1306 64x32, I2C (libDaisy `SSD130xI2c64x32Driver` defaults) |
 | MIDI | TRS in, UART (`MidiUartHandler` defaults) |
-| microSD | SDMMC1. **1-bit only.** 4-bit transfers never complete on this board, and each failed attempt waits ~172 s (HAL timeout 2^32 clocks @ 25 MHz). Do not re-enable 4-bit ahead of 1-bit. (1-bit at 12.5 MHz works; that the first mount is now fast is not yet confirmed on hardware.) |
+| microSD | SDMMC1. **1-bit only.** 4-bit transfers never complete on this board, and each failed attempt waits ~172 s (HAL timeout 2^32 clocks @ 25 MHz). Do not re-enable 4-bit ahead of 1-bit. 1-bit at 12.5 MHz: first mount is near-instant (confirmed on hardware, v0.3.0). |
 | Audio | 48 kHz, 32-sample blocks, stereo in/out |
 
 Pin map originally from https://github.com/recursinging/kxmx_bluemchen (old libDaisy),
