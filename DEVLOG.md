@@ -169,6 +169,16 @@ DAT1–DAT3 routing or pull-ups on the board are the first suspect.
 - Everything in v0.3.0 is now verified on hardware: reverb, UI, knobs/CV, mono/stereo, SD
   load/save/overwrite, hot insertion, fast mount.
 
+## 2026-11-18 — Local build on Jeff's PC
+
+- Jeff cloned the repo to `C:\Coding Projects\BluemchenFX`, ran `setup.sh` and `make`
+  successfully with the Daisy Toolchain.
+- His compiler is GCC 10.2.1 (10-2020-q4) vs 13.3.1 in CI, so his bin isn't byte-identical:
+  113,908 bytes (86.9 % flash) vs 112,244. Same source, and the memory layout is correct
+  (SD sector buffers still cache-line aligned). His local build hasn't been flashed yet.
+- Git for Windows had checked text files out as CRLF, which can break `setup.sh`. Added
+  `.gitattributes` to keep `*.sh` / `Makefile` / workflows LF, and the example presets byte-exact CRLF.
+
 ---
 
 ## Open items

@@ -1,0 +1,12 @@
+# Normalise line endings: LF in the repo, platform-native in working copies...
+* text=auto
+# ...except files that must stay LF everywhere (bash / make break on CRLF)
+*.sh      text eol=lf
+Makefile  text eol=lf
+*.mk      text eol=lf
+*.yml     text eol=lf
+# Example presets are deliberately CRLF (Windows Notepad friendly); keep bytes as-is
+sd-card/**/*.TXT -text
+# Binaries
+*.bin     binary
+*.elf     binary

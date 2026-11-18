@@ -30,7 +30,12 @@ git clone --recursive https://github.com/jeffreykrueger/BluemchenFX.git
 make            # -> build/BluemchenFX.bin
 ```
 
-- Toolchain: arm-none-eabi-gcc (CI uses xPack 13.3.1-1.1; Jeff uses the Daisy Toolchain on Windows / Git Bash).
+- Toolchain: arm-none-eabi-gcc. CI and `prebuilt/` use xPack **13.3.1-1.1** (112,244-byte bin
+  at v0.3.0). Jeff's Daisy Toolchain on Windows is **GCC 10.2.1 (10-2020-q4)** and produces a
+  slightly larger, not byte-identical bin (113,908 bytes, 86.9 %). Check flash headroom against
+  the larger of the two. Release binaries come from CI.
+- Line endings: `.gitattributes` keeps `*.sh` and `Makefile` LF everywhere. Jeff's clone uses
+  Git for Windows' CRLF conversion for other text files.
 - **Flash budget: 128 KB internal, currently ~86 % used.** The project and libDaisy build with
   `-Os` to fit. `src/fx/reverb.cpp` opts back into `-O2` with `#pragma GCC optimize`; do the
   same for new DSP files. If the link fails with "FLASH overflowed", libDaisy was probably built
