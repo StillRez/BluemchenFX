@@ -356,3 +356,24 @@ Tracked as GitHub Issues:
 - #6 Delay: tap tempo and/or MIDI clock sync
 - #7 Delay sound tuning: feedback saturation
 - #8 UI tweaks: HOME page crowding and other improvements
+
+---
+
+## 2026-11-18 — Design pass: effect chaining
+
+Docs only. **No code changed, nothing compiled or verified on hardware.**
+
+- Jeff's decisions: up to 4 serial slots, repeats allowed, parallel routing later, long press
+  = back, and the planned effect families (modulation, filters/drive, pitch/granular,
+  looper/sampler, wavefolders, dynamics, SR/bit reduction).
+- Wrote `docs/design/effect-chaining.md`, covering:
+  - the engine: per-slot instances, SDRAM arenas plus a shared large pool for the looper, and
+    per-slot bypass/swap crossfades;
+  - a topology byte reserved for parallel routing;
+  - settings v3 with v2 migration;
+  - a chain preset format that still reads old files into slot 1;
+  - the hierarchical UI (folds in #8), the CC map 20 + 8·slot + param, and a CPU meter;
+  - a host test harness and a phased plan.
+- Open questions Q1–Q5 (arena sizes, param recall, partial presets, CPU overload policy,
+  bypass default) need Jeff's answers before phase 1. Phase 0 (CPU meter + host tests) doesn't
+  depend on them.
