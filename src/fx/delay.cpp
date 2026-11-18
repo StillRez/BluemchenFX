@@ -1,17 +1,9 @@
 #include "fx/delay.h"
-#include "dev/sdram.h"
 
 using namespace daisysp;
 
 namespace fx
 {
-// 2 s at 48 kHz plus headroom for the interpolating read
-static constexpr size_t kMaxDelaySamples = 96000 + 256;
-
-// ~386 KB per channel: SDRAM
-static DelayLine<float, kMaxDelaySamples> DSY_SDRAM_BSS g_line_l;
-static DelayLine<float, kMaxDelaySamples> DSY_SDRAM_BSS g_line_r;
-
 // name       min      max      default  curve               unit
 const ParamSpec Delay::kSpecs[NUM_PARAMS] = {
     {"TIME", 0.01f, 2.f, 0.68f, Curve::Exponential, Unit::Seconds},  // ~0.37 s
@@ -28,12 +20,17 @@ static inline float Saturate(float x)
     return 2.f * SoftClip(0.5f * x);
 }
 
-void Delay::Init(float sample_rate)
+bool Delay::Init(float sample_rate, Arena &mem)
 {
-    sr_ = sample_rate;
+    sr_     = sample_rate;
+    line_l_ = mem.New<Line>();
+    line_r_ = mem.New<Line>();
+    if(!line_l_ || !line_r_)
+        return false;
     for(size_t i = 0; i < NUM_PARAMS; i++)
         target_[i] = kSpecs[i].ToReal(kSpecs[i].def);
     Reset();
+    return true;
 }
 
 void Delay::InitFilters()
@@ -69,8 +66,8 @@ void Delay::SnapSmoothing()
 
 void Delay::Reset()
 {
-    g_line_l.Init(); // zeroes the buffer
-    g_line_r.Init();
+    line_l_->Init(); // zeroes the buffer
+    line_r_->Init();
     InitFilters();
     SnapSmoothing();
     SetFilterFreqs();
@@ -108,12 +105,12 @@ void Delay::Process(const float *in_l,
     for(size_t i = 0; i < size; i++)
     {
         delay_samps_ += (target_samps - delay_samps_) * glide;
-        g_line_l.SetDelay(delay_samps_);
-        g_line_r.SetDelay(delay_samps_);
+        line_l_->SetDelay(delay_samps_);
+        line_r_->SetDelay(delay_samps_);
 
         // Read and filter the delayed signal (feeds both wet out and feedback)
-        const float wet_l = lp_l_.Process(hp_l_.Process(g_line_l.Read()));
-        const float wet_r = lp_r_.Process(hp_r_.Process(g_line_r.Read()));
+        const float wet_l = lp_l_.Process(hp_l_.Process(line_l_->Read()));
+        const float wet_r = lp_r_.Process(hp_r_.Process(line_r_->Read()));
 
         // Ping-pong: feedback crosses over, input moves into the left line
         const float fb_l = straight * wet_l + ping_ * wet_r;
@@ -122,8 +119,8 @@ void Delay::Process(const float *in_l,
         const float send_l = straight * in_l[i] + ping_ * mono;
         const float send_r = straight * in_r[i];
 
-        g_line_l.Write(Saturate(send_l + fb_ * fb_l));
-        g_line_r.Write(Saturate(send_r + fb_ * fb_r));
+        line_l_->Write(Saturate(send_l + fb_ * fb_l));
+        line_r_->Write(Saturate(send_r + fb_ * fb_r));
 
         out_l[i] = in_l[i] * dry_gain + wet_l * wet_gain;
         out_r[i] = in_r[i] * dry_gain + wet_r * wet_gain;

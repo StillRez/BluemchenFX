@@ -24,6 +24,9 @@ CXXFLAGS := -std=gnu++17 -O2 -g -Wall -Wno-unused-function -MMD -MP \
 FW_SOURCES := \
 	$(SRC)/fx/reverb.cpp \
 	$(SRC)/fx/delay.cpp \
+	$(SRC)/fx/registry.cpp \
+	$(SRC)/app/chain.cpp \
+	$(SRC)/app/chain_settings.cpp \
 	$(SRC)/app/preset_text.cpp
 
 TEST_SOURCES := $(wildcard *.cpp)

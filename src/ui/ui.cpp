@@ -12,6 +12,8 @@ static constexpr float    kStepFine     = 0.005f;
 static constexpr float    kStepNormal   = 0.01f;
 static constexpr float    kStepFast     = 0.04f;
 
+static constexpr int      kFirstParamPage = 4; // after HOME, EFFECT, BYPASS, BYP MODE
+
 static const char *const kSourceTitle[app::SRC_LAST]
     = {"KNOB 1", "KNOB 2", "CV 1", "CV 2"};
 static const char *const kSourceTag[app::SRC_LAST] = {"K1", "K2", "C1", "C2"};
@@ -37,8 +39,9 @@ void Ui::Init(bluemchen::Hardware::Display *display,
 // ---------------------------------------------------------------- pages
 int Ui::NumPages() const
 {
-    // HOME + EFFECT + params + routes + INPUT + CPU + LOAD SD + SAVE SD + SAVE
-    return 2 + (int)Fx().NumParams() + app::SRC_LAST + 5;
+    // HOME + EFFECT + BYPASS + BYP MODE + params + routes
+    //   + INPUT + CPU + LOAD SD + SAVE SD + SAVE
+    return kFirstParamPage + (int)Fx().NumParams() + app::SRC_LAST + 5;
 }
 
 Ui::Page Ui::PageAt(int p) const
@@ -48,7 +51,11 @@ Ui::Page Ui::PageAt(int p) const
         return {PAGE_HOME, 0};
     if(p == 1)
         return {PAGE_EFFECT, 0};
-    p -= 1; // params start at page 2
+    if(p == 2)
+        return {PAGE_BYPASS, 0};
+    if(p == 3)
+        return {PAGE_BYPMODE, 0};
+    p -= kFirstParamPage - 1; // first param page -> 1
     if(p <= n)
         return {PAGE_PARAM, p - 1};
     if(p <= n + app::SRC_LAST)
@@ -107,20 +114,22 @@ void Ui::OnTurn(int32_t inc, uint32_t now_ms)
         float    step = dt < 25 ? kStepFast : (dt < 80 ? kStepNormal : kStepFine);
         last_turn_    = now_ms;
 
-        float &v = St().norm[pg.index];
+        float &v = Sl().norm[pg.index];
         v        = Clamp01(v + step * (float)inc);
         edited_param_ = pg.index;
     }
     else if(pg.kind == PAGE_ROUTE)
     {
-        // cycle: none, param 0 .. param N-1
-        int r = St().route[pg.index] + (inc > 0 ? 1 : -1);
+        // cycle: none, param 0 .. param N-1 of this slot
+        app::Route &rt = settings_->route[pg.index];
+        int r = (rt.slot == slot_ ? rt.param : app::kRouteNone) + (inc > 0 ? 1 : -1);
         int n = (int)Fx().NumParams();
         if(r < app::kRouteNone)
             r = n - 1;
         if(r >= n)
             r = app::kRouteNone;
-        St().route[pg.index] = (int8_t)r;
+        rt = r == app::kRouteNone ? app::Route{app::kRouteNone, app::kRouteNone}
+                                  : app::Route{(int8_t)slot_, (int8_t)r};
         route_changed_             = true;
     }
     else if(pg.kind == PAGE_EFFECT)
@@ -131,6 +140,14 @@ void Ui::OnTurn(int32_t inc, uint32_t now_ms)
         if(e >= (int)num_effects_)
             e = 0;
         pending_effect_ = e;
+    }
+    else if(pg.kind == PAGE_BYPASS)
+    {
+        Sl().flags ^= app::SLOT_BYPASS;
+    }
+    else if(pg.kind == PAGE_BYPMODE)
+    {
+        Sl().flags ^= app::SLOT_HARD;
     }
     else if(pg.kind == PAGE_INPUT)
     {
@@ -158,12 +175,12 @@ void Ui::OnClick(uint32_t now_ms)
     Page pg     = PageAt(page_);
     switch(pg.kind)
     {
-        case PAGE_HOME: page_ = 2; break; // jump to first parameter
+        case PAGE_HOME: page_ = kFirstParamPage; break; // jump to first parameter
         case PAGE_EFFECT:
             // 1st click: choose. 2nd click: switch (if changed).
             if(!editing_)
-                pending_effect_ = settings_->effect;
-            else if(pending_effect_ != settings_->effect)
+                pending_effect_ = Sl().type < num_effects_ ? Sl().type : 0;
+            else if(pending_effect_ != Sl().type)
                 effect_request_ = pending_effect_;
             editing_ = !editing_;
             break;
@@ -306,6 +323,8 @@ void Ui::Draw(const float *eff, float meter_in, float meter_out, uint32_t now_ms
         {
             case PAGE_HOME: DrawHome(eff); break;
             case PAGE_EFFECT: DrawEffect(editing_); break;
+            case PAGE_BYPASS: DrawBypass(editing_); break;
+            case PAGE_BYPMODE: DrawBypMode(editing_); break;
             case PAGE_PARAM: DrawParam(pg.index, eff, editing_); break;
             case PAGE_ROUTE: DrawRoute(pg.index, editing_); break;
             case PAGE_INPUT: DrawInput(editing_); break;
@@ -338,7 +357,9 @@ void Ui::DrawHome(const float *eff)
 {
     DrawHeader(Fx().Name(),
                false,
-               settings_->input_mode == app::INPUT_MONO ? "MONO" : nullptr);
+               Sl().Bypassed()                              ? "BYP"
+               : settings_->input_mode == app::INPUT_MONO ? "MONO"
+                                                            : nullptr);
 
     const int n     = (int)Fx().NumParams();
     const int col_w = kContentW / n;
@@ -383,15 +404,25 @@ void Ui::DrawParam(size_t idx, const float *eff, bool editing)
     int fill = (int)(eff[idx] * bx1 + 0.5f);
     if(fill > 0)
         disp_->DrawRect(0, 28, fill, 31, true, true);
-    int tick = (int)(St().norm[idx] * bx1 + 0.5f);
+    int tick = (int)(Sl().norm[idx] * bx1 + 0.5f);
     disp_->DrawLine(tick, 26, tick, 27, true);
 }
 
 void Ui::DrawRoute(size_t src, bool editing)
 {
     DrawHeader(kSourceTitle[src], editing, src < app::SRC_CV_1 ? "SET" : "MOD");
-    int8_t      r    = St().route[src];
-    const char *dest = r == app::kRouteNone ? "--" : Fx().Spec(r).name;
+    const app::Route &rt = settings_->route[src];
+    const char       *dest = "--";
+    char              buf[12];
+    if(rt.slot == slot_)
+        dest = Fx().Spec(rt.param).name;
+    else if(!rt.None())
+    {
+        // routed to another slot (set by a chain preset): "3:DECAY"
+        const fx::Effect *p = fx::Prototype(settings_->slot[rt.slot].type);
+        snprintf(buf, sizeof(buf), "%d:%s", rt.slot + 1, p ? p->Spec(rt.param).name : "?");
+        dest = buf;
+    }
     disp_->SetCursor(0, 10);
     disp_->WriteString(">", Font_7x10, true);
     disp_->SetCursor(10, 10);
@@ -403,15 +434,35 @@ void Ui::DrawRoute(size_t src, bool editing)
 void Ui::DrawEffect(bool editing)
 {
     DrawHeader("EFFECT", editing, nullptr);
-    const int   shown = editing ? pending_effect_ : settings_->effect;
+    const int   cur   = Sl().type < num_effects_ ? Sl().type : 0;
+    const int   shown = editing ? pending_effect_ : cur;
     const char *name  = effects_[shown]->Name();
     disp_->SetCursor(0, 10);
     disp_->WriteString(name, Font_7x10, true);
     const char *hint = !editing                               ? "push: change"
-                       : pending_effect_ != settings_->effect ? "push: switch"
+                       : pending_effect_ != cur ? "push: switch"
                                                               : "push: keep";
     disp_->SetCursor(0, 25);
     disp_->WriteString(hint, Font_4x6, true);
+}
+
+void Ui::DrawBypass(bool editing)
+{
+    DrawHeader("BYPASS", editing, nullptr);
+    disp_->SetCursor(0, 10);
+    disp_->WriteString(Sl().Bypassed() ? "ON" : "OFF", Font_7x10, true);
+    disp_->SetCursor(0, 25);
+    disp_->WriteString(Sl().Bypassed() ? "effect bypassed" : "effect active", Font_4x6, true);
+}
+
+void Ui::DrawBypMode(bool editing)
+{
+    DrawHeader("BYP MODE", editing, nullptr);
+    const bool hard = Sl().Hard();
+    disp_->SetCursor(0, 10);
+    disp_->WriteString(hard ? "HARD" : "TRAILS", Font_7x10, true);
+    disp_->SetCursor(0, 25);
+    disp_->WriteString(hard ? "cut tails" : "tails ring out", Font_4x6, true);
 }
 
 void Ui::DrawInput(bool editing)
@@ -504,7 +555,7 @@ const char *Ui::SourceTag(size_t param) const
     tag[0] = 0;
     for(int s = 0; s < app::SRC_LAST; s++)
     {
-        if(St().route[s] == (int8_t)param && strlen(tag) < 6)
+        if(settings_->route[s].Is(slot_, (int)param) && strlen(tag) < 6)
             strcat(tag, kSourceTag[s]);
     }
     return tag;

@@ -4,6 +4,7 @@ Tests that run on the PC, no module needed:
 
 ```
 make -C tests run            # build and run everything (~15 s)
+make -C tests run ARGS=chain # only tests whose name contains "chain"
 make -C tests run ARGS=delay # only tests whose name contains "delay"
 ```
 
@@ -22,5 +23,21 @@ the effects include. CI runs them on every push, and the firmware build waits fo
 | `presets_round_trip` | random states → text → state match within the text's resolution, and re-serializing gives identical text |
 | `presets_without_effect_line_and_unknown_effect` | `effect =` detection |
 | `presets_garbage_is_ignored` | junk lines are counted as errors and change nothing; empty/truncated input is safe |
+| `chain_registry_matches_test_list` | every registered effect is also in these tests' lists |
+| `settings_layout_is_stable` | the persisted v3 layout (size, offsets) hasn't changed by accident |
+| `settings_defaults`, `settings_validation_rejects_bad_data` | factory settings are valid; corrupt flash data is refused |
+| `settings_migrate_v2`, `settings_migrate_v1` | old saved settings land in slot 1 (v2's other effect seeds recall) |
+| `settings_slot_type_recall_and_routes` | switching a slot's effect recalls its last settings per type; routes follow the new effect's defaults |
+| `settings_single_effect_preset` | old-format presets load into slot 1 and empty slots 2–4 |
+| `chain_empty_is_a_wire` | an empty chain passes audio unchanged, bit for bit |
+| `chain_single_slot_equals_effect` | after the fade-in, a slot outputs exactly what the effect does |
+| `chain_serial_and_independent_instances` | delay → reverb → delay in the chain = the same three effects run by hand (two delays with different settings don't share buffers) |
+| `chain_bypass_and_swap_are_click_free` | hard/trails bypass and effect swaps never step faster than the crossfade allows (a 100 Hz sine vs its delayed copy) |
+| `chain_hard_bypass_is_exact_and_clears_tails` | hard bypass = exact wire; un-bypassing brings no stale echoes |
+| `chain_trails_bypass_lets_tails_ring` | trails bypass keeps the tail ringing over the dry signal, and it dies away |
+| `chain_swap_keeps_other_slots_playing` | a swap completes in ~20 ms while the other slots keep running |
+| `chain_effect_too_big_for_arena` | an effect that doesn't fit its arena leaves the slot empty (a wire) and is reported |
+| `chain_stress_random_changes` | 30 s of random swaps, bypass toggles and parameter jumps stay finite and bounded |
 
-**Adding an effect:** add it to `g_effects[]` at the top of `test_effects.cpp`.
+**Adding an effect:** add it to `g_effects[]` at the top of `test_effects.cpp` and to the
+`tested` list in `test_chain.cpp`.

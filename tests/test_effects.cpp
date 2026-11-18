@@ -32,11 +32,17 @@ struct Entry
 };
 Entry g_effects[] = {{&g_reverb, false}, {&g_delay, false}};
 
+// Each effect gets its own "SDRAM" arena, as in a chain slot
+constexpr size_t kArenaBytes = 8u << 20;
+
 fx::Effect &Get(size_t i)
 {
     if(!g_effects[i].inited)
     {
-        g_effects[i].fx->Init(kSr);
+        static fx::Arena arenas[sizeof(g_effects) / sizeof(g_effects[0])];
+        arenas[i].Init(new uint8_t[kArenaBytes], kArenaBytes);
+        bool ok = g_effects[i].fx->Init(kSr, arenas[i]);
+        CHECKF(ok, "%s: Init failed (arena %zu bytes)", g_effects[i].fx->Name(), kArenaBytes);
         g_effects[i].inited = true;
     }
     return *g_effects[i].fx;

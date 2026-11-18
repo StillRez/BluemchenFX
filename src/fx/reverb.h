@@ -27,12 +27,17 @@ class Reverb : public Effect
     };
 
     const char *Name() const override { return "REVERB"; }
-    void        Init(float sample_rate) override;
+    bool        Init(float sample_rate, Arena &mem) override;
     void        Reset() override;
 
     size_t           NumParams() const override { return NUM_PARAMS; }
     const ParamSpec &Spec(size_t idx) const override { return kSpecs[idx]; }
     void             SetParam(size_t idx, float norm) override;
+    int              DefaultRoute(int src) const override
+    {
+        static const int8_t r[4] = {DECAY, MIX, DECAY, HI_CUT}; // K1 K2 CV1 CV2
+        return src >= 0 && src < 4 ? r[src] : -1;
+    }
 
     void Process(const float *in_l,
                  const float *in_r,
@@ -49,7 +54,8 @@ class Reverb : public Effect
     float target_[NUM_PARAMS] = {};
     float fb_ = 0.f, mix_ = 0.f, lo_ = 20.f, hi_ = 18000.f;
 
-    daisysp::Svf hp_l_, hp_r_;
+    daisysp::Svf       hp_l_, hp_r_;
+    daisysp::ReverbSc *tank_ = nullptr; // ~400 KB, in the slot's SDRAM arena
 };
 
 } // namespace fx

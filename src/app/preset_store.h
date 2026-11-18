@@ -33,18 +33,24 @@ class PresetStore
     };
 
     /** No card access here; only sets up the driver. `effects` is the
-     *  firmware's effect list (index = Settings::effect). */
+     *  firmware's effect list (index = fx::EffectId). */
     void Init(const fx::Effect *const *effects, size_t num_effects);
 
     bool Mounted() const { return mounted_; }
 
-    /** Writes the active effect's settings to slot (1..99). Keeps the
-     *  slot's existing name if it has one, otherwise "PRESET nn". */
-    Status Save(int slot, const Settings &settings);
+    /** Writes one effect's settings (`effect` = index into the effect list)
+     *  to slot (1..99). Keeps the slot's existing name if it has one,
+     *  otherwise "PRESET nn". */
+    Status Save(int                slot,
+                uint8_t            effect,
+                const EffectState &state,
+                uint8_t            input_mode);
 
-    /** Applies the slot's file on top of `settings` (only on success).
-     *  May change settings.effect if the preset is for another effect. */
-    Status Load(int slot, Settings &settings);
+    /** Reads the slot's file on top of the given values (in: current, out:
+     *  loaded; only changed on success). `effect` changes if the file names
+     *  another effect, which then starts from its defaults; a file without
+     *  an effect line applies to `effect`. */
+    Status Load(int slot, uint8_t &effect, EffectState &state, uint8_t &input_mode);
 
     /** Reads only the slot's name and effect name (empty if missing). */
     Status Peek(int slot, char *name, size_t len, char *effect, size_t effect_len);

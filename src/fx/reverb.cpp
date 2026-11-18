@@ -1,13 +1,9 @@
 #include "fx/reverb.h"
-#include "dev/sdram.h"
 
 using namespace daisysp;
 
 namespace fx
 {
-// ReverbSc carries ~400 KB of delay memory: it must live in SDRAM.
-static ReverbSc DSY_SDRAM_BSS g_reverbsc;
-
 // Mean loop delay of the ReverbSc tank (8 lines, 1933..4127 samples @ 48k).
 static constexpr float kMeanLoopDelaySec = 3015.5f / 48000.f;
 
@@ -26,17 +22,21 @@ static inline float DecayToFeedback(float rt60)
     return fb > 0.999f ? 0.999f : fb;
 }
 
-void Reverb::Init(float sample_rate)
+bool Reverb::Init(float sample_rate, Arena &mem)
 {
-    sr_ = sample_rate;
+    sr_   = sample_rate;
+    tank_ = mem.New<ReverbSc>(); // ~400 KB of delay memory
+    if(!tank_)
+        return false;
     for(size_t i = 0; i < NUM_PARAMS; i++)
         target_[i] = kSpecs[i].ToReal(kSpecs[i].def);
     Reset();
+    return true;
 }
 
 void Reverb::Reset()
 {
-    g_reverbsc.Init(sr_); // clears the tank (~400 KB)
+    tank_->Init(sr_); // clears the tank (~400 KB)
     hp_l_.Init(sr_);
     hp_r_.Init(sr_);
     hp_l_.SetRes(0.f);
@@ -67,8 +67,8 @@ void Reverb::Process(const float *in_l,
     fonepole(lo_, target_[LO_CUT], k);
     fonepole(hi_, target_[HI_CUT], k);
 
-    g_reverbsc.SetFeedback(fb_);
-    g_reverbsc.SetLpFreq(hi_);
+    tank_->SetFeedback(fb_);
+    tank_->SetLpFreq(hi_);
     hp_l_.SetFreq(lo_);
     hp_r_.SetFreq(lo_);
 
@@ -84,7 +84,7 @@ void Reverb::Process(const float *in_l,
         float send_r = hp_r_.High();
 
         float wet_l, wet_r;
-        g_reverbsc.Process(send_l, send_r, &wet_l, &wet_r);
+        tank_->Process(send_l, send_r, &wet_l, &wet_r);
 
         out_l[i] = in_l[i] * dry_gain + wet_l * wet_gain;
         out_r[i] = in_r[i] * dry_gain + wet_r * wet_gain;

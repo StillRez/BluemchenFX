@@ -41,9 +41,11 @@ make            # -> build/BluemchenFX.bin
   the larger of the two. Release binaries come from CI.
 - Line endings: `.gitattributes` keeps `*.sh` and `Makefile` LF everywhere. StillRez's clone uses
   Git for Windows' CRLF conversion for other text files.
-- **Memory budget (BOOT_SRAM, the default):** code + rodata in AXI SRAM, **480 KB** (131 KB used,
-  27 %, at `-O2`). `.data`/`.bss` + stack in **DTCM, 128 KB** (57 KB used); the stack grows down
-  from `0x20020000` into whatever's left. Big buffers go in SDRAM (`DSY_SDRAM_BSS`, 64 MB). The
+- **Memory budget (BOOT_SRAM, the default):** code + rodata in AXI SRAM, **480 KB** (137 KB used,
+  28 %, at `-O2`). `.data`/`.bss` + stack in **DTCM, 128 KB** (62 KB used); the stack grows down
+  from `0x20020000` into whatever's left. Big buffers go in SDRAM (`DSY_SDRAM_BSS`, 64 MB):
+  4 × 8 MB slot arenas at `0xC0000000` (32 MB), SD buffers after them. SDRAM .bss is NOLOAD
+  (not zeroed at boot). The
   project builds at `OPT = -O2`; libDaisy stays `-Os` (setup.sh), which is fine for HAL code.
   Legacy internal-flash build: `make APP_TYPE=BOOT_NONE OPT=-Os` (91 % of 128 KB, will stop fitting).
 - Submodules are pinned (libDaisy `1289a00`, DaisySP `2c72eaf`, DaisySP-LGPL `c89d380`).
@@ -75,10 +77,14 @@ make `Error 74` after "File downloaded successfully" is normal: the Daisy resets
 src/main.cpp            audio callback, encoder events, knob takeover, MIDI, QSPI save, SD actions
 src/hw/bluemchen.*      hardware layer
 src/fx/effect.h         Effect interface + ParamSpec (name, range, curve, unit, ToReal/ToNorm)
+src/fx/arena.h          bump allocator over a slot's SDRAM arena (no free; Reset() on swap)
+src/fx/registry.*       EffectId (persisted), prototypes (metadata), Construct/Destroy
 src/fx/reverb.*         ReverbSc (SDRAM) + SVF lo cut + equal-power mix; decay = RT60 seconds
 src/fx/delay.*          stereo delay <= 2 s (SDRAM DelayLines), OnePole loop filters, ping-pong
 src/ui/ui.*             page/menu system, 64x32 drawing
-src/app/settings.h      persisted POD struct v2: active effect + per-effect EffectState (QSPI)
+src/app/settings.h      persisted POD struct v3 (chain: 4 SlotStates + Route per source), legacy v1/v2
+src/app/chain.*         chain engine: serial slots, per-slot g/b ramps, click-free swap/bypass
+src/app/chain_settings.* defaults, Valid(), MigrateV1/V2, SetSlotType (recall + routes), preset bridge
 src/app/preset_text.*   preset text format (hardware-independent, host-testable)
 src/app/preset_store.*  SD mount + slot files (FatFS)
 sd-card/BLUEMCHN/       example presets
@@ -88,20 +94,31 @@ docs/design/            design docs (effect chaining plan, phases 0-4)
 
 ## Conventions and gotchas
 
-- **New effects** implement `fx::Effect` (incl. `Reset()`) and publish a `ParamSpec` table. UI
-  pages, knob/CV routing, MIDI CC (20+n) and preset keys are generated from it. Max 8 params.
-  Header names can be up to 7 chars. Register by **appending** to `EffectId` / `effects[]` in
-  `main.cpp`: the index is persisted, so never reorder. Presets refer to effects by `Name()`.
-  Up to `kMaxEffects` = 4 without a layout change. Add it to `tests/test_effects.cpp` too.
+- **New effects** implement `fx::Effect` (incl. `Reset()` and `DefaultRoute()`) and publish a
+  `ParamSpec` table. UI pages, knob/CV routing, MIDI CC (20+n) and preset keys are generated
+  from it. Max 8 params. Header names can be up to 7 chars. `Init(sr, Arena&)` takes big buffers
+  from the slot's SDRAM arena (8 MB) and returns false if they don't fit. **No global/static
+  state**: several instances can run at once. The object itself must fit
+  `kEffectStorageBytes` (512, static_assert in registry.cpp). Register by **appending** to
+  `EffectId` and the tables in `src/fx/registry.cpp`: ids are persisted, never reorder. Presets
+  refer to effects by `Name()`. Add it to `tests/test_effects.cpp` (stability) and the list in
+  `tests/test_chain.cpp` (a test fails if the registry has an effect the tests don't).
+- **Effect defaults** (`ParamSpec::def`) are what an effect starts with in an empty slot. They
+  were picked on paper; StillRez plans to tune them by ear (open item in DEVLOG).
 - **CPU load:** the CPU page shows the audio callback's average and peak load (libDaisy
   `CpuLoadMeter` around the whole callback; peak ignores the first 2 s after boot). Measure new
   effects there and record them in the cost table in `docs/design/effect-chaining.md`.
-- **Effect switching** goes through `ApplySettings()` in `main.cpp`: it sets `switching` (audio
-  callback passes dry), waits 2 ms, pushes params, calls `Reset()` on the incoming effect,
-  swaps settings, then clears `switching`. Never change `settings->effect` any other way.
-- **`Settings` layout is persisted** (v2 = `0xB10E0002`, 168 bytes). Adding fields: use `pad`
-  bytes where zero means "old behaviour", or bump the version **and** add a migration like
-  `ReadLegacySettings()` (v1 -> v2), so users keep their settings.
+- **Effect chain** (`app::Chain`, design in `docs/design/effect-chaining.md`): change a slot's
+  type with `app::SetSlotType()` on the settings (handles recall + routes). `SyncChain()` in
+  `main.cpp` then calls `Chain::SetType()`, and `Chain::Poll()` performs the swap once the slot
+  has faded out (audio no longer touches the old effect). Never destroy or Init an effect the
+  audio might be running. Params reach an effect only while `settings->slot[k].type` matches the
+  loaded type (avoids the old effect getting the new one's values mid-fade, a click the tests
+  caught). Phase 1: the UI/MIDI/presets work on slot 1 only (`gui.EditSlot()` is always 0).
+- **`Settings` layout is persisted** (v3 = `0xB10E0003`, 164 bytes, pinned by the
+  `settings_layout_is_stable` test). Adding fields: use `pad` bytes where zero means "old
+  behaviour", or bump the version **and** add a migration (see `MigrateV2()` and
+  `ReadLegacySettings()` in `main.cpp`), so users keep their settings.
 - **Don't use `daisysp::Svf` inside feedback loops.** Its built-in cubic drive term
   (`band -= 0.5*band^3`) goes unstable at the levels a saturating loop reaches (host test blew
   up at 95 % feedback). Use `daisysp::OnePole` there. Svf is fine on bounded inputs (reverb send).

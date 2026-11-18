@@ -2,10 +2,15 @@
 /**
  * OLED + encoder user interface for a 64x32 display.
  *
+ * Effect chain, phase 1: the pages edit chain slot 1 only (slots 2-4 stay
+ * empty until the chain UI in phase 2).
+ *
  * Pages (turn the encoder to move between them):
  *   HOME          overview: bar for every parameter + I/O meters
- *   EFFECT        choose the effect (REVERB, DELAY, ...)
- *   <param> x N   one page per parameter of the active effect
+ *   EFFECT        choose the slot's effect (REVERB, DELAY, ...)
+ *   BYPASS        OFF / ON (crossfaded, no clicks)
+ *   BYP MODE      TRAILS (tails ring out) / HARD (cut, saves CPU)
+ *   <param> x N   one page per parameter of the slot's effect
  *   K1 / K2       route knob 1 / knob 2 to a parameter (absolute control)
  *   CV1 / CV2     route CV 1 / CV 2 to a parameter (bipolar offset)
  *   INPUT         STEREO, or MONO (left input copied to right)
@@ -22,6 +27,7 @@
 #include "hw/bluemchen.h"
 #include "fx/effect.h"
 #include "app/settings.h"
+#include "fx/registry.h"
 
 namespace ui
 {
@@ -61,8 +67,10 @@ class Ui
     /** True once after a routing change (so knob takeover can reset). */
     bool TakeRouteChanged();
     /** Effect index the user confirmed on the EFFECT page, or -1. The
-     *  caller performs the switch (it needs to silence/reset audio). */
+     *  caller performs the switch on EditSlot() (recall, routes, audio). */
     int TakeEffectRequest();
+    /** The chain slot the pages edit. */
+    int EditSlot() const { return slot_; }
     /** Pending SD card request, if any (latest request wins). */
     bool TakeSdRequest(SdAction &action, int &slot);
     /** Result of a PEEK for the slot display. `used` = file exists.
@@ -90,6 +98,8 @@ class Ui
     {
         PAGE_HOME,
         PAGE_EFFECT,
+        PAGE_BYPASS,
+        PAGE_BYPMODE,
         PAGE_PARAM,
         PAGE_ROUTE,
         PAGE_INPUT,
@@ -112,9 +122,17 @@ class Ui
     void   DrawInput(bool editing);
     void   DrawCpu();
     void   DrawEffect(bool editing);
-    const fx::Effect       &Fx() const { return *effects_[settings_->effect]; }
-    app::EffectState       &St() { return settings_->Active(); }
-    const app::EffectState &St() const { return settings_->Active(); }
+    void   DrawBypass(bool editing);
+    void   DrawBypMode(bool editing);
+    /** The edited slot's effect. Slot 1 always holds one in phase 1; an
+     *  empty slot falls back to the first effect's metadata. */
+    const fx::Effect &Fx() const
+    {
+        const fx::Effect *p = fx::Prototype(Sl().type);
+        return p ? *p : *effects_[0];
+    }
+    app::SlotState       &Sl() { return settings_->slot[slot_]; }
+    const app::SlotState &Sl() const { return settings_->slot[slot_]; }
     void   DrawSd(bool load, bool editing);
     bool   IsSdPage(int p) const;
     void   RequestSd(SdAction a);
@@ -129,6 +147,7 @@ class Ui
     size_t                        num_effects_ = 0;
     app::Settings                *settings_    = nullptr;
 
+    int slot_           = 0;  // chain slot being edited
     int pending_effect_ = 0;  // choice while editing the EFFECT page
     int effect_request_ = -1; // confirmed choice, for the main loop
 

@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include "fx/arena.h"
 
 namespace fx
 {
@@ -58,9 +59,13 @@ class Effect
   public:
     virtual ~Effect() {}
     virtual const char *Name() const = 0;
-    /** One-time setup (allocates/zeroes buffers). Called at boot for
-     *  every effect, before audio starts. */
-    virtual void Init(float sample_rate) = 0;
+    /** Setup: allocate buffers from `mem` (the slot's SDRAM arena) and
+     *  clear them. Returns false if the arena is too small. Called from the
+     *  main loop while the slot isn't being processed; the effect object
+     *  lives in internal RAM, only its big buffers in the arena. Effects
+     *  must keep no global state: a chain can hold several instances of
+     *  the same effect. */
+    virtual bool Init(float sample_rate, Arena &mem) = 0;
     /** Clear all audio state (tails, delay buffers), keeping parameters.
      *  Called from the main loop while the effect is NOT being processed
      *  (e.g. just before switching to it), so it may take a few ms. */
@@ -68,6 +73,15 @@ class Effect
 
     virtual size_t           NumParams() const       = 0;
     virtual const ParamSpec &Spec(size_t idx) const = 0;
+
+    /** Parameter a modulation source should control when this effect is
+     *  loaded into a slot that source points at (src: 0 = knob 1, 1 = knob 2,
+     *  2 = CV 1, 3 = CV 2), or -1 for none. */
+    virtual int DefaultRoute(int src) const
+    {
+        (void)src;
+        return -1;
+    }
 
     /** Set parameter in normalised units (0..1). Called once per block
      *  from the audio callback; the effect handles its own smoothing. */

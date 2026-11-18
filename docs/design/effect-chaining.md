@@ -96,6 +96,10 @@ Both run per slot. The other slots keep playing.
      its recalled params (see below), then `Reset()`.
   4. Clear `swapping` and fade back in.
 
+  *As built (phase 1):* parameters reach an effect only while the settings' type for that slot
+  matches the loaded effect. Otherwise the old effect, during its fade-out, would get the new
+  effect's parameter values (the host tests caught this as a click: a delay's TIME jumping).
+
   This is the existing global `switching` mechanism scoped to one slot. Init of a large
   buffer happens in step 3 with audio still running through the other slots, so no dropouts.
 
@@ -246,8 +250,10 @@ This replaces the crowded HOME screen from #8.
 ## 5. Knobs, CV and MIDI
 
 - Routes target `(slot, param)`. Knob takeover (0.03 threshold) works per target, unchanged.
-- If a slot's type changes, routes pointing at it go to NONE. Its param indices no longer
-  mean the same thing.
+- If a slot's type changes, routes pointing at it follow the **new effect's default routing**
+  for that source (`Effect::DefaultRoute()`), or go to NONE if it has none. *(Changed during
+  phase 1: plain NONE would have left the knobs dead after every effect switch, a regression
+  from v2 where each effect had its own routing.)*
 - MIDI CC: slot *n* (0–3), param *p* (0–7) → CC `20 + 8n + p`. Slot 1 keeps CC 20–27, so
   existing setups still work. That gives 20–51. CC 52–55 toggle bypass for slots 1–4
   (value ≥ 64 = bypassed). Program Change still loads `PRESETnn.TXT`.
@@ -276,7 +282,7 @@ Each phase is one or more commits and ends with a hardware check by StillRez.
 | Phase | Work | Hardware check |
 |---|---|---|
 | 0 | CPU meter + host test harness in CI. No behaviour change. **Done, verified on hardware (2026-11-18).** | CPU % shown, reverb/delay costs recorded |
-| 1 | Arena + per-slot instances, chain engine, settings v3 + migration. The UI temporarily edits slot 1 only. | Old settings come back in slot 1; no clicks on bypass/swap |
+| 1 | Arena + per-slot instances, chain engine, settings v3 + migration. The UI temporarily edits slot 1 only (plus BYPASS / BYP MODE pages). **Done in code (2026-11-18)**, hardware check pending. | Old settings come back in slot 1; no clicks on bypass/swap |
 | 2 | Hierarchical UI: HOME overview, slot pages, setup menu, long press = back. | Build a 2–4 slot chain from the panel; closes #8 |
 | 3 | Chain presets + CC map | Old and new presets load; MIDI CCs reach slots 2–4 |
 | 4 | New effects, cheapest first: filter/drive, wavefolder, bit/SR reduction, tremolo/chorus, compressor/limiter; then pitch/granular; then the looper (large pool) | Per-effect checks + CPU table |

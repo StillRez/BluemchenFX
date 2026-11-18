@@ -79,8 +79,14 @@ answering dfu-util's last status request. Check that the `size = …` it reports
 | Encoder hold (0.7 s) | Store all settings to flash ("SAVED") |
 | Knob 1 / Knob 2 | Absolute control of the routed parameter (defaults: reverb **Decay** / **Mix**, delay **Time** / **Mix**). A knob only takes over once you move it, so stored values aren't overwritten at power-up |
 | CV 1 / CV 2 | Bipolar offset on the routed parameter, ±5 V = ±full range (defaults: reverb **Decay** / **Hi Cut**, delay **Time** / **Feedback**) |
-| MIDI CC 20+ | Parameters of the active effect in page order, CC 20 = first (reverb: Decay, Mix, Lo Cut, Hi Cut; delay: Time, Feedback, Mix, Ping, Lo Cut, Hi Cut). Any channel |
+| MIDI CC 20+ | Parameters of the effect in chain slot 1, in page order, CC 20 = first (reverb: Decay, Mix, Lo Cut, Hi Cut; delay: Time, Feedback, Mix, Ping, Lo Cut, Hi Cut). Any channel |
 | MIDI Program Change 0–98 | Load SD preset 1–99 (switches effect if the preset is for the other one) |
+
+**Effect chain (in progress).** Audio now runs through a chain of up to 4 effect slots (see
+`docs/design/effect-chaining.md`). Until the chain UI arrives, the pages below edit **slot 1**
+and slots 2–4 stay empty, so the module behaves like a single-effect unit. Switching effects,
+bypassing and loading presets crossfade over ~10 ms, so none of them click.
+Your saved settings from earlier versions move into slot 1 automatically.
 | INPUT page | **STEREO** (default) or **MONO**. In mono, the left input is copied to the right channel before any effect processing, so a single cable into the left jack gives full stereo output. "MONO" also shows in the HOME header |
 
 Each effect remembers its own parameter values **and** its own knob/CV assignments, so switching
@@ -90,16 +96,23 @@ Moving a knob or sending a CC briefly pops up that parameter's page.
 
 ## Display pages (64×32 OLED)
 
-1. **HOME** – active effect's name and a bar per parameter (live values including CV)
-2. **EFFECT** – REVERB / DELAY
-3. **Parameter pages** for the active effect (see below)
-4. **KNOB 1 / KNOB 2 / CV 1 / CV 2** – choose which parameter each source controls (or `--`)
-5. **INPUT** – STEREO / MONO (click, turn to change, click to confirm; saved with the other settings)
-6. **CPU** – audio processing load: average (large) and peak since the last reset (`pk`). Click
+1. **HOME** – the effect's name and a bar per parameter (live values including CV). `BYP` in
+   the corner when bypassed.
+2. **EFFECT** – REVERB / DELAY. Switching back to an effect brings back the settings it had
+   (until power-off).
+3. **BYPASS** – OFF / ON
+4. **BYP MODE** – TRAILS (bypass mutes the effect's input, so reverb/echo tails ring out) or
+   HARD (cuts the effect immediately and stops processing it, which saves CPU)
+5. **Parameter pages** for the effect (see below)
+6. **KNOB 1 / KNOB 2 / CV 1 / CV 2** – choose which parameter each source controls (or `--`).
+   When you switch effects, sources that controlled the old effect move to the new effect's
+   usual parameters (e.g. Knob 1: Decay on the reverb, Time on the delay).
+7. **INPUT** – STEREO / MONO (click, turn to change, click to confirm; saved with the other settings)
+8. **CPU** – audio processing load: average (large) and peak since the last reset (`pk`). Click
    resets the peak. The header inverts when the peak reaches 95 %, i.e. close to dropouts.
-7. **LOAD SD** – click, turn to pick a slot (01–99), click again to load it
-8. **SAVE SD** – click, turn to pick a slot, click again to write the current setup to it
-9. **SAVE** – store the current setup to internal flash as the power-up state
+9. **LOAD SD** – click, turn to pick a slot (01–99), click again to load it
+10. **SAVE SD** – click, turn to pick a slot, click again to write the current setup to it
+11. **SAVE** – store the current setup to internal flash as the power-up state
 
 ### Reverb parameters
 
@@ -197,10 +210,14 @@ src/
   main.cpp            audio callback, encoder events, knob takeover, MIDI, flash storage
   hw/bluemchen.*      hardware layer: encoder, 2 pots, 2 CV, OLED, MIDI, DAC, audio
   fx/effect.h         Effect interface + ParamSpec (name, range, curve, unit)
+  fx/arena.h          per-slot SDRAM bump allocator for effect buffers
+  fx/registry.*       the effect list: ids (persisted), metadata prototypes, construction
   fx/reverb.*         ReverbSc + SVF lo-cut + equal-power mix
   fx/delay.*          stereo delay: SDRAM delay lines, one-pole loop filters, ping-pong
   ui/ui.*             page/menu system and OLED drawing
-  app/settings.h      persisted settings: per-effect params/routing (QSPI, last 4 KB sector)
+  app/settings.h      persisted settings v3: chain slots, routing (QSPI, last 4 KB sector)
+  app/chain.*         chain engine: 4 serial slots, click-free bypass / effect swaps
+  app/chain_settings.* defaults, validation, v1/v2 migration, slot recall (no hardware deps)
   app/preset_text.*   preset text format: write + parse (no hardware deps)
   app/preset_store.*  SD card mount + slot files (FatFS)
 sd-card/BLUEMCHN/     example presets to copy to the card
@@ -215,12 +232,14 @@ MSYS2). CI runs them on every push and won't build firmware if they fail.
 ### Adding another effect
 
 Implement `fx::Effect`: list your parameters in a `ParamSpec` table, handle them in `SetParam`,
-process audio in `Process`, and clear buffers in `Reset`. Then **append** it to `EffectId` /
-`effects[]` in `main.cpp` (never reorder: the index is saved in flash) and give it default
-routing in `MakeDefaults()`. The EFFECT page, parameter pages, knob/CV routing, MIDI CCs, presets
-and flash storage all follow from the parameter table (up to 8 parameters, up to 4 effects
-before `kMaxEffects` must grow, which is a settings layout change). Also add it to the effect
-list at the top of `tests/test_effects.cpp`, so CI checks it for stability.
+process audio in `Process`, clear buffers in `Reset`, and say which parameters the knobs/CVs
+should control by default in `DefaultRoute`. Take big buffers from the arena passed to
+`Init(sample_rate, arena)` and keep no global state: a chain can hold several copies of the
+same effect. Then **append** it to `EffectId` and the tables in `src/fx/registry.cpp` (never
+reorder: the id is saved in flash). The EFFECT page, parameter pages, knob/CV routing, MIDI CCs,
+presets and flash storage all follow from the parameter table (up to 8 parameters). Also add it
+to the lists in `tests/test_effects.cpp` and `tests/test_chain.cpp`, so CI checks it for
+stability (a test fails if you forget).
 
 ## License
 

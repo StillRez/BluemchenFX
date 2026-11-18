@@ -442,6 +442,77 @@ What this means for chaining: even four reverbs (≈ 56 %) fit in a chain, so th
 effects can't overload the module. Next: phase 1 (chain engine, per-slot instances and SDRAM
 arenas, settings v3 with migration).
 
+
+## 2026-11-18 — Phase 1: chain engine + settings v3
+
+Audio now runs through `app::Chain`, an engine with 4 serial slots. To keep this phase testable
+on its own, the UI, MIDI and presets still work on **slot 1** only. Slots 2–4 exist in the
+engine and the settings but stay empty until the chain UI (phase 2).
+
+**Engine (`src/app/chain.*`)**
+- Each slot has its own effect instance: the object sits in a 512-byte storage block in DTCM,
+  and the big buffers in that slot's **8 MB SDRAM arena** (`fx::Arena`, a bump allocator).
+- The effects lost their file-static SDRAM globals. `Init(sr, Arena&)` now allocates, so two
+  delays in one chain no longer share a buffer.
+- Each slot has two ramps of about 10 ms: `g` (run gain: dry wire ↔ effect) and `b` (trails: the
+  effect's input fades out while the dry signal fades in).
+  - **Hard bypass** ramps `g` to 0. The effect then stops running and gets `Reset()` once, so it
+    doesn't come back with stale echoes.
+  - **Trails bypass** ramps `b` to 1, so tails ring out over the dry signal.
+- **Effect swaps** fade the slot to a wire. `Poll()` (main loop, non-blocking) then destroys the
+  old effect, builds and initialises the new one in the same storage and arena, and fades it
+  in. The other slots keep playing throughout.
+- The old global `switching` / dry-switch path is gone.
+- **Bug caught by the new tests:** during a swap, the old effect's fade-out was being fed the
+  *new* effect's parameter values. A fading delay got the reverb's numbers, its TIME jumped,
+  and it clicked. Parameters now only reach an effect while the settings' type matches the
+  loaded effect. A mutation check confirms the test fails without the fix.
+
+**Settings v3 (`0xB10E0003`, 164 bytes)**
+- Contents: 4 slots (type, bypass/hard flags, 8 params), routes as (slot, param) per source,
+  input mode, a topology byte (0 = serial, reserved), and out gain.
+- **Migration:** v2 (0.4–0.5) and v1 (≤ 0.3) are read raw from the flash sector before
+  `storage.Init()`. The active effect lands in slot 1 with its params and routing. v2's
+  *other* effect seeds recall, so switching slot 1 to it brings your old values back.
+- **Recall** (RAM only): each slot remembers the last params per effect type.
+- **Routes on a type change:** sources that pointed at the slot follow the new effect's
+  `DefaultRoute()` (reverb K1/K2/CV1/CV2 = Decay/Mix/Decay/Hi Cut, delay = Time/Mix/Time/
+  Feedback). This changes the design doc's "→ NONE": that would have left the knobs dead after
+  every effect switch, a regression from v2.
+- `fx/registry.*`: `EffectId` (persisted), metadata prototypes, `Construct()` / `Destroy()`.
+
+**UI:** new **BYPASS** (OFF/ON) and **BYP MODE** (TRAILS/HARD) pages after EFFECT. HOME shows
+`BYP` when bypassed.
+
+**Presets:** still the single-effect text format. Loading one puts it into slot 1 and empties
+slots 2–4 (a preset is the whole chain). A file for another effect now starts from that
+effect's defaults rather than its last v2 values.
+
+**Host tests:** 17 new, 26 in total, all pass. They cover settings layout, validation,
+migration, recall and routes, plus the engine:
+- an empty chain is bit-exact;
+- slot output = effect output;
+- delay → reverb → delay in the chain = the three effects run by hand;
+- bypass and swaps are click-free;
+- hard bypass is exact and clears tails; trails keep ringing and then die away;
+- swaps don't interrupt the other slots;
+- an effect too big for its arena is handled;
+- 30 s of random changes stay stable.
+
+**Memory:** SRAM 136.7 KB (27.8 %), DTCM 61.9 KB (47 %), SDRAM 32 MB of arenas at `0xC0000000`.
+
+*Status: compiled (CI toolchain); host tests pass; `prebuilt/` updated. **Not yet run on
+hardware.** To check on the module:*
+1. *Your saved setup comes back after flashing: same effect, values, routing, input mode.*
+2. *Switching REVERB ↔ DELAY on the EFFECT page doesn't click. Switching back restores what
+   you'd dialled in.*
+3. *BYPASS ON/OFF doesn't click in either mode. TRAILS lets the tail ring out; HARD cuts it,
+   and un-bypassing doesn't bring back old echoes.*
+4. *Knobs follow the effect after a switch (K1 = Decay on reverb, Time on delay).*
+5. *SD presets load/save. MIDI CC still controls the parameters.*
+6. *Save (long press) + power cycle keeps everything, including bypass.*
+7. *CPU page: about the same as before (reverb ~14 %, delay ~5 %).*
+
 ---
 
 ## Open items
@@ -455,3 +526,6 @@ Tracked as GitHub Issues:
 - #6 Delay: tap tempo and/or MIDI clock sync
 - #7 Delay sound tuning: feedback saturation
 - #8 UI tweaks: HOME page crowding and other improvements
+- *(no issue yet)* Tune each effect's default settings (`ParamSpec::def`) by ear, so loading an
+  effect into an empty slot sounds good straight away. StillRez will do this on the module.
+  Claude's session couldn't open the issue (the repo rename broke API writes from it).

@@ -1,8 +1,10 @@
 /**
  * BluemchenFX — effect firmware for the kxmx Bluemchen (Daisy Seed).
  *
- * Effects: REVERB, DELAY (selected on the EFFECT page). Each effect keeps
- * its own parameter values and knob/CV routing.
+ * Audio runs through an effect chain of up to 4 slots (app::Chain). Phase 1
+ * of the chaining plan: the UI, knobs, MIDI and SD presets work on slot 1;
+ * slots 2-4 exist in the engine and settings but stay empty until the chain
+ * UI (docs/design/effect-chaining.md).
  *
  * Controls
  *   Encoder turn      browse pages / change value while editing
@@ -12,11 +14,11 @@
  *                     once the knob is moved
  *   CV 1 / 2          bipolar offset (+-5 V = +-full range) on the routed
  *                     parameter
- *   MIDI CC 20..27    parameter 1..8 of the active effect (any channel)
+ *   MIDI CC 20..27    parameter 1..8 of slot 1's effect (any channel)
  *   INPUT page        STEREO, or MONO (left input feeds both channels)
  *   LOAD SD / SAVE SD presets as text files on the microSD card
  *                     (0:/BLUEMCHN/PRESET01.TXT .. PRESET99.TXT)
- *   MIDI Program Chg  0..98 loads SD preset 1..99 (switches effect if needed)
+ *   MIDI Program Chg  0..98 loads SD preset 1..99
  */
 #include "daisy_seed.h"
 #include "per/qspi.h"
@@ -24,10 +26,11 @@
 #include "util/CpuLoadMeter.h"
 
 #include "hw/bluemchen.h"
-#include "fx/reverb.h"
-#include "fx/delay.h"
+#include "fx/registry.h"
 #include "ui/ui.h"
 #include "app/settings.h"
+#include "app/chain.h"
+#include "app/chain_settings.h"
 #include "app/preset_store.h"
 
 #include <cmath>
@@ -46,25 +49,21 @@ static constexpr uint8_t  kMidiCcBase    = 20;
 static constexpr uint32_t kDisplayPeriod = 33; // ms (~30 fps)
 static constexpr uint32_t kCpuPeakSettle = 2000; // ms: ignore start-up blocks in the peak
 
-// ------------------------------------------------------------ effects
-// The index is persisted (Settings::effect) and written to nothing else:
-// presets use the effect *name*. Only ever append to this list.
-enum EffectId : uint8_t
-{
-    FX_REVERB = 0,
-    FX_DELAY  = 1,
-    FX_COUNT
-};
-
-static fx::Reverb               reverb;
-static fx::Delay                delay_fx;
-static fx::Effect *const        effects[FX_COUNT] = {&reverb, &delay_fx};
-static const fx::Effect *const *effects_const     = effects;
-static_assert(FX_COUNT <= app::kMaxEffects, "raise kMaxEffects (layout change)");
+// ------------------------------------------------------- SDRAM arenas
+// Each chain slot's effect takes its big buffers from its own 8 MB arena
+// (≈ 21 s of stereo float audio). SDRAM .bss is NOLOAD: not zeroed at
+// boot, effects clear what they allocate. A 24 MB shared pool for one
+// looper/long sampler at a time is reserved in the design (phase 4).
+static constexpr size_t kSlotArenaBytes = 8u * 1024u * 1024u;
+static uint8_t DSY_SDRAM_BSS arena_mem[app::kNumSlots][kSlotArenaBytes]
+    __attribute__((aligned(32)));
+static fx::Arena arenas[app::kNumSlots];
 
 // -------------------------------------------------------------- state
 static Hardware hw;
 static ui::Ui   gui;
+static app::Chain chain;
+static app::Recall recall; // per slot + type: last parameters (RAM only)
 
 static PersistentStorage<app::Settings> storage(hw.seed.qspi);
 static app::Settings                   *settings = nullptr;
@@ -75,20 +74,8 @@ static volatile int32_t  enc_total   = 0; // running sum, ISR-only writer
 static volatile uint32_t click_count = 0;
 static volatile uint32_t long_count  = 0;
 static bool              long_fired  = false;
-static float             effective[app::kMaxParams];
+static float             effective[app::kNumSlots][app::kMaxParams];
 static float             meter_in = 0.f, meter_out = 0.f;
-
-// Set by the main loop while it swaps effects; the audio callback then
-// passes dry audio and touches no effect.
-static volatile bool switching = false;
-
-// `switching` is volatile but the settings copy isn't: stop the compiler
-// moving plain memory accesses across the flag (single core, so this is
-// all the ordering the audio interrupt needs).
-static inline void CompilerBarrier()
-{
-    __asm volatile("" ::: "memory");
-}
 
 // Knob takeover state (main loop only)
 struct KnobState
@@ -138,44 +125,36 @@ static void AudioCallback(AudioHandle::InputBuffer  in,
     const float *in_l = in[0];
     const float *in_r = settings->input_mode == app::INPUT_MONO ? in[0] : in[1];
 
-    if(switching)
+    // Effective parameters: stored base values + CV offsets on routed params
+    for(size_t k = 0; k < app::kNumSlots; k++)
+        for(size_t i = 0; i < app::kMaxParams; i++)
+            effective[k][i] = settings->slot[k].norm[i];
+    for(int s = app::SRC_CV_1; s <= app::SRC_CV_2; s++)
     {
+        const app::Route rt = settings->route[s];
+        if(rt.None() || rt.slot >= (int)app::kNumSlots || rt.param < 0
+           || rt.param >= (int)app::kMaxParams)
+            continue;
+        float cv = hw.CvBipolar(s == app::SRC_CV_1 ? Hardware::CV_1 : Hardware::CV_2);
+        if(fabsf(cv) < kCvDeadband)
+            cv = 0.f;
+        float &v = effective[rt.slot][rt.param];
+        v        = v + cv;
+        v        = v < 0.f ? 0.f : (v > 1.f ? 1.f : v);
+    }
+
+    uint8_t types[app::kNumSlots];
+    for(size_t k = 0; k < app::kNumSlots; k++)
+        types[k] = settings->slot[k].type;
+    chain.Process(in_l, in_r, out[0], out[1], size, effective, types);
+
+    const float gain = settings->out_gain;
+    if(gain != 1.f)
         for(size_t i = 0; i < size; i++)
         {
-            out[0][i] = in_l[i];
-            out[1][i] = in_r[i];
+            out[0][i] *= gain;
+            out[1][i] *= gain;
         }
-    }
-    else
-    {
-        fx::Effect             &effect = *effects[settings->effect];
-        const app::EffectState &st     = settings->Active();
-
-        // CV modulation on top of stored base values
-        float mod[app::kMaxParams] = {};
-        for(int s = app::SRC_CV_1; s <= app::SRC_CV_2; s++)
-        {
-            int8_t r = st.route[s];
-            if(r == app::kRouteNone)
-                continue;
-            float cv = hw.CvBipolar(s == app::SRC_CV_1 ? Hardware::CV_1
-                                                       : Hardware::CV_2);
-            if(fabsf(cv) < kCvDeadband)
-                cv = 0.f;
-            mod[r] += cv;
-        }
-
-        const size_t n = effect.NumParams();
-        for(size_t i = 0; i < n; i++)
-        {
-            float v      = st.norm[i] + mod[i];
-            v            = v < 0.f ? 0.f : (v > 1.f ? 1.f : v);
-            effective[i] = v;
-            effect.SetParam(i, v);
-        }
-
-        effect.Process(in_l, in_r, out[0], out[1], size);
-    }
 
     meter_in  = PeakFollow(meter_in, in[0], size);
     meter_out = PeakFollow(meter_out, out[0], size);
@@ -183,98 +162,34 @@ static void AudioCallback(AudioHandle::InputBuffer  in,
 }
 
 // ----------------------------------------------------------- settings
-static void SetDefaultRouting(app::EffectState &st, int k1, int k2, int cv1, int cv2)
-{
-    st.route[app::SRC_KNOB_1] = (int8_t)k1;
-    st.route[app::SRC_KNOB_2] = (int8_t)k2;
-    st.route[app::SRC_CV_1]   = (int8_t)cv1;
-    st.route[app::SRC_CV_2]   = (int8_t)cv2;
-}
-
-static app::Settings MakeDefaults()
-{
-    app::Settings s;
-    std::memset(&s, 0, sizeof(s));
-    s.version    = app::kSettingsVersion;
-    s.effect     = FX_REVERB;
-    s.input_mode = app::INPUT_STEREO;
-    for(size_t e = 0; e < FX_COUNT; e++)
-    {
-        app::EffectState &st = s.fx[e];
-        for(size_t i = 0; i < app::kMaxParams; i++)
-            st.norm[i] = i < effects[e]->NumParams() ? effects[e]->Spec(i).def : 0.f;
-        for(int r = 0; r < app::SRC_LAST; r++)
-            st.route[r] = app::kRouteNone;
-    }
-    SetDefaultRouting(s.fx[FX_REVERB],
-                      fx::Reverb::DECAY,
-                      fx::Reverb::MIX,
-                      fx::Reverb::DECAY,
-                      fx::Reverb::HI_CUT);
-    SetDefaultRouting(s.fx[FX_DELAY],
-                      fx::Delay::TIME,
-                      fx::Delay::MIX,
-                      fx::Delay::TIME,
-                      fx::Delay::FEEDBACK);
-    return s;
-}
-
-static bool NormsValid(const float *norm)
-{
-    for(size_t i = 0; i < app::kMaxParams; i++)
-        if(!(norm[i] >= 0.f && norm[i] <= 1.f)) // also catches NaN
-            return false;
-    return true;
-}
-
-static bool RoutesValid(const int8_t *route, size_t num_params)
-{
-    for(int i = 0; i < app::SRC_LAST; i++)
-        if(route[i] < app::kRouteNone || route[i] >= (int)num_params)
-            return false;
-    return true;
-}
-
-static bool SettingsValid(const app::Settings &s)
-{
-    if(s.version != app::kSettingsVersion || s.effect >= FX_COUNT
-       || s.input_mode >= app::INPUT_MODE_LAST)
-        return false;
-    for(size_t e = 0; e < FX_COUNT; e++)
-        if(!NormsValid(s.fx[e].norm)
-           || !RoutesValid(s.fx[e].route, effects[e]->NumParams()))
-            return false;
-    return true;
-}
-
-/** Firmware up to v0.3.0 stored a single-effect (reverb) SettingsV1 in the
+/** Earlier firmware stored v1 (<= 0.3.0) or v2 (0.4-0.5) settings in the
  *  same flash sector. If that's what's there, convert it so the user keeps
- *  their saved reverb settings. Must run before storage.Init(). */
+ *  their setup (the active effect lands in slot 1). Run before
+ *  storage.Init(). */
 static bool ReadLegacySettings(app::Settings &out)
 {
     using State = PersistentStorage<app::Settings>::State;
     static_assert(sizeof(State) == 4, "PersistentStorage state word changed");
-    struct LegacySave // == PersistentStorage<SettingsV1>::SaveStruct
+    const uint8_t *raw = static_cast<const uint8_t *>(hw.seed.qspi.GetData(kFlashOffset));
+    State          state;
+    uint32_t       version;
+    std::memcpy(&state, raw, sizeof(state));
+    std::memcpy(&version, raw + sizeof(State), sizeof(version));
+    if(state != State::FACTORY && state != State::USER)
+        return false;
+    if(version == app::kSettingsVersionV2)
     {
-        State           state;
-        app::SettingsV1 s;
-    };
-    const auto *old
-        = reinterpret_cast<const LegacySave *>(hw.seed.qspi.GetData(kFlashOffset));
-    if(old->state != State::FACTORY && old->state != State::USER)
-        return false;
-    const app::SettingsV1 &v1 = old->s;
-    if(v1.version != app::kSettingsVersionV1 || !NormsValid(v1.norm)
-       || !RoutesValid(v1.route, reverb.NumParams())
-       || v1.input_mode >= app::INPUT_MODE_LAST)
-        return false;
-
-    out            = MakeDefaults();
-    out.effect     = FX_REVERB;
-    out.input_mode = v1.input_mode;
-    std::memcpy(out.fx[FX_REVERB].norm, v1.norm, sizeof(v1.norm));
-    std::memcpy(out.fx[FX_REVERB].route, v1.route, sizeof(v1.route));
-    return true;
+        app::SettingsV2 v2;
+        std::memcpy(&v2, raw + sizeof(State), sizeof(v2));
+        return app::MigrateV2(v2, out, &recall);
+    }
+    if(version == app::kSettingsVersionV1)
+    {
+        app::SettingsV1 v1;
+        std::memcpy(&v1, raw + sizeof(State), sizeof(v1));
+        return app::MigrateV1(v1, out);
+    }
+    return false;
 }
 
 // ---------------------------------------------------- boot diagnostics
@@ -307,15 +222,20 @@ static void ResetKnobTakeover(int k)
         = hw.Knob(k == 0 ? Hardware::KNOB_1 : Hardware::KNOB_2);
 }
 
+static void ResetAllKnobs()
+{
+    ResetKnobTakeover(0);
+    ResetKnobTakeover(1);
+}
+
 static void UpdateKnobs(uint32_t now)
 {
-    app::EffectState &st = settings->Active();
     for(int k = 0; k < 2; k++)
     {
-        int8_t     r  = st.route[k];
+        const app::Route rt = settings->route[k];
         float      v  = hw.Knob(k == 0 ? Hardware::KNOB_1 : Hardware::KNOB_2);
         KnobState &ks = knob_state[k];
-        if(r == app::kRouteNone)
+        if(rt.None())
         {
             ks.anchor = v;
             continue;
@@ -326,53 +246,51 @@ static void UpdateKnobs(uint32_t now)
             ks.engaged = true;
         if(ks.engaged)
         {
-            float &dst = st.norm[r];
+            float &dst = settings->slot[rt.slot].norm[rt.param];
             if(fabsf(v - dst) > 0.004f)
             {
-                if(fabsf(v - dst) > 0.01f)
-                    gui.Peek(r, now);
+                if(fabsf(v - dst) > 0.01f && rt.slot == gui.EditSlot())
+                    gui.Peek(rt.param, now);
                 dst = v;
             }
         }
     }
 }
 
-/** Replace the live settings, switching effect if `next` uses another one.
- *  The new effect is reset (no stale tails/echoes) while audio runs dry. */
+/** Makes the chain engine follow the settings: effect types (click-free
+ *  swaps, done over several calls) and bypass. Called every loop. */
+static void SyncChain(uint32_t now)
+{
+    for(size_t k = 0; k < app::kNumSlots; k++)
+    {
+        const app::SlotState &sl = settings->slot[k];
+        if(sl.type != chain.Target(k))
+            chain.SetType(k, sl.type, sl.norm);
+        chain.SetBypass(k, sl.Bypassed(), sl.Hard());
+    }
+    chain.Poll();
+    for(size_t k = 0; k < app::kNumSlots; k++)
+        if(chain.TakeInitFailure(k))
+            gui.Flash("NO MEM", now); // effect didn't fit its arena
+}
+
+/** Replace the live settings (e.g. from a preset). The chain follows in
+ *  SyncChain(); knobs must be moved again before they override values. */
 static void ApplySettings(const app::Settings &next)
 {
-    if(next.effect != settings->effect && next.effect < FX_COUNT)
-    {
-        fx::Effect &incoming = *effects[next.effect];
-        switching            = true;
-        CompilerBarrier();
-        System::Delay(2); // > 1 audio block: the callback now passes dry audio
-        for(size_t i = 0; i < incoming.NumParams(); i++)
-            incoming.SetParam(i, next.fx[next.effect].norm[i]);
-        incoming.Reset(); // clears buffers, snaps smoothing to the new values
-        *settings = next;
-        for(size_t i = 0; i < app::kMaxParams; i++)
-            effective[i] = settings->Active().norm[i];
-        CompilerBarrier(); // all of the above must land before audio resumes
-        switching = false;
-    }
-    else
-    {
-        *settings = next;
-    }
-    // knobs must be moved again before they override the new values
-    ResetKnobTakeover(0);
-    ResetKnobTakeover(1);
+    *settings = next;
+    ResetAllKnobs();
 }
 
 static void SwitchEffect(int idx, uint32_t now)
 {
-    if(idx < 0 || idx >= FX_COUNT || idx == settings->effect)
+    if(idx < 0 || idx >= fx::FX_COUNT)
         return;
     app::Settings next = *settings;
-    next.effect        = (uint8_t)idx;
+    if(!app::SetSlotType(next, recall, gui.EditSlot(), (uint8_t)idx))
+        return;
     ApplySettings(next);
-    gui.Flash(effects[idx]->Name(), now);
+    gui.Flash(fx::Prototype(idx)->Name(), now);
 }
 
 // ------------------------------------------------------- SD presets
@@ -400,10 +318,16 @@ static void SdBusyHint()
 static void LoadPreset(int slot, uint32_t now)
 {
     SdBusyHint();
-    app::Settings next = *settings;
-    SdStatus      st   = presets.Load(slot, next);
+    // Single-effect presets: loaded into slot 1, slots 2-4 emptied
+    uint8_t          type  = settings->slot[0].type < fx::FX_COUNT ? settings->slot[0].type
+                                                                   : (uint8_t)fx::FX_REVERB;
+    app::EffectState state = app::SlotAsEffectState(*settings, 0);
+    uint8_t          mode  = settings->input_mode;
+    SdStatus         st    = presets.Load(slot, type, state, mode);
     if(st == SdStatus::OK)
     {
+        app::Settings next = *settings;
+        app::ApplySingleEffectPreset(next, recall, type, state, mode);
         ApplySettings(next);
         static char msg[10];
         snprintf(msg, sizeof(msg), "LOAD %02d", slot);
@@ -428,7 +352,10 @@ static void HandleSd(uint32_t now)
         case ui::SdAction::LOAD: LoadPreset(slot, now); break;
         case ui::SdAction::SAVE:
         {
-            SdStatus st = presets.Save(slot, *settings);
+            SdStatus st = presets.Save(slot,
+                                       settings->slot[0].type,
+                                       app::SlotAsEffectState(*settings, 0),
+                                       settings->input_mode);
             if(st == SdStatus::OK)
             {
                 static char msg[10];
@@ -463,14 +390,15 @@ static void HandleMidi(uint32_t now)
             continue;
         ControlChangeEvent cc  = ev.AsControlChange();
         int                idx = (int)cc.control_number - kMidiCcBase;
-        if(idx < 0 || idx >= (int)effects[settings->effect]->NumParams())
+        const fx::Effect  *e   = fx::Prototype(settings->slot[0].type);
+        if(!e || idx < 0 || idx >= (int)e->NumParams())
             continue;
-        app::EffectState &st = settings->Active();
-        st.norm[idx]         = cc.value / 127.f;
-        gui.Peek(idx, now);
+        settings->slot[0].norm[idx] = cc.value / 127.f;
+        if(gui.EditSlot() == 0)
+            gui.Peek(idx, now);
         // a knob routed here must be moved again before it takes over
         for(int k = 0; k < 2; k++)
-            if(st.route[k] == idx)
+            if(settings->route[k].Is(0, idx))
                 ResetKnobTakeover(k);
     }
 }
@@ -482,7 +410,8 @@ static void Splash()
     d.SetCursor(2, 4);
     d.WriteString("BLUEMCHEN", Font_6x8, true);
     d.SetCursor(2, 18);
-    d.WriteString(effects[settings->effect]->Name(), Font_7x10, true);
+    const fx::Effect *e = fx::Prototype(settings->slot[0].type);
+    d.WriteString(e ? e->Name() : "--", Font_7x10, true);
     d.Update();
     System::Delay(800);
 }
@@ -491,20 +420,22 @@ int main(void)
 {
     hw.Init(kBlockSize);
     Diag("1 HW OK");
-    for(auto *e : effects)
-        e->Init(hw.SampleRate()); // also clears its SDRAM buffers
-    Diag("2 FX OK");
+    for(size_t k = 0; k < app::kNumSlots; k++)
+        arenas[k].Init(arena_mem[k], kSlotArenaBytes);
+    chain.Init(hw.SampleRate(), arenas);
+    recall.Clear();
+    Diag("2 CHAIN OK");
 
-    // Load settings from QSPI: current layout, else migrate the v1
-    // (single-effect) layout, else defaults.
+    // Load settings from QSPI: current layout, else migrate v2/v1, else
+    // defaults.
     app::Settings migrated;
-    const bool    have_v1 = ReadLegacySettings(migrated);
-    Diag(have_v1 ? "3a V1 FOUND" : "3a NO V1");
-    storage.Init(MakeDefaults(), kFlashOffset);
-    Diag(SettingsValid(storage.GetSettings()) ? "3b SET OK" : "3b SET NEW");
-    if(!SettingsValid(storage.GetSettings()))
+    const bool    have_old = ReadLegacySettings(migrated);
+    Diag(have_old ? "3a OLD FOUND" : "3a NO OLD");
+    storage.Init(app::MakeDefaults(), kFlashOffset);
+    Diag(app::Valid(storage.GetSettings()) ? "3b SET OK" : "3b SET NEW");
+    if(!app::Valid(storage.GetSettings()))
     {
-        if(have_v1)
+        if(have_old)
         {
             storage.GetSettings() = migrated;
             storage.Save();
@@ -515,22 +446,22 @@ int main(void)
         }
     }
     settings = &storage.GetSettings();
+    // Phase 1 UI edits slot 1, so it must hold an effect
+    if(settings->slot[0].type == fx::FX_NONE)
+        app::SetSlotType(*settings, recall, 0, fx::FX_REVERB);
     Diag("3c SETTINGS");
 
-    // Start the active effect from its stored values (no glide at boot)
-    {
-        fx::Effect &e = *effects[settings->effect];
-        for(size_t i = 0; i < e.NumParams(); i++)
-            e.SetParam(i, settings->Active().norm[i]);
-        e.Reset();
-    }
-    for(size_t i = 0; i < app::kMaxParams; i++)
-        effective[i] = settings->Active().norm[i];
+    // Build the chain's effects from the stored settings (audio isn't
+    // running yet, so every slot swaps immediately)
+    SyncChain(0);
+    for(size_t k = 0; k < app::kNumSlots; k++)
+        for(size_t i = 0; i < app::kMaxParams; i++)
+            effective[k][i] = settings->slot[k].norm[i];
 
     Diag("4 FX RESET");
-    gui.Init(&hw.display, effects_const, FX_COUNT, settings);
+    gui.Init(&hw.display, fx::Prototypes(), fx::FX_COUNT, settings);
     Splash();
-    presets.Init(effects_const, FX_COUNT); // card is mounted on first use
+    presets.Init(fx::Prototypes(), fx::FX_COUNT); // card is mounted on first use
     Diag("5 SD INIT");
 
     hw.StartAdc();
@@ -538,8 +469,7 @@ int main(void)
     hw.StartAudio(AudioCallback);
     Diag("6 AUDIO ON");
     System::Delay(20); // let the ADC filters settle
-    ResetKnobTakeover(0);
-    ResetKnobTakeover(1);
+    ResetAllKnobs();
 
     uint32_t last_draw   = 0;
     bool     cpu_settled = false;
@@ -566,19 +496,19 @@ int main(void)
         int edited = gui.TakeEditedParam();
         if(edited >= 0)
             for(int k = 0; k < 2; k++)
-                if(settings->Active().route[k] == edited)
+                if(settings->route[k].Is(gui.EditSlot(), edited))
                     ResetKnobTakeover(k);
         if(gui.TakeRouteChanged())
-        {
-            ResetKnobTakeover(0);
-            ResetKnobTakeover(1);
-        }
+            ResetAllKnobs();
         SwitchEffect(gui.TakeEffectRequest(), now);
 
         // ---- knobs, MIDI, SD
         UpdateKnobs(now);
         HandleMidi(now);
         HandleSd(now);
+
+        // ---- chain: effect swaps (click-free), bypass
+        SyncChain(now);
 
         // ---- persistence (QSPI erase/write blocks for a few ms; audio
         //      keeps running from internal flash)
@@ -598,7 +528,7 @@ int main(void)
         if(now - last_draw >= kDisplayPeriod)
         {
             last_draw = now;
-            gui.Draw(effective, sqrtf(meter_in), sqrtf(meter_out), now);
+            gui.Draw(effective[gui.EditSlot()], sqrtf(meter_in), sqrtf(meter_out), now);
         }
     }
 }

@@ -40,12 +40,21 @@ class Delay : public Effect
     };
 
     const char *Name() const override { return "DELAY"; }
-    void        Init(float sample_rate) override;
+    bool        Init(float sample_rate, Arena &mem) override;
     void        Reset() override;
 
     size_t           NumParams() const override { return NUM_PARAMS; }
     const ParamSpec &Spec(size_t idx) const override { return kSpecs[idx]; }
     void             SetParam(size_t idx, float norm) override;
+    int              DefaultRoute(int src) const override
+    {
+        static const int8_t r[4] = {TIME, MIX, TIME, FEEDBACK}; // K1 K2 CV1 CV2
+        return src >= 0 && src < 4 ? r[src] : -1;
+    }
+
+    // 2 s at 48 kHz plus headroom for the interpolating read
+    static constexpr size_t kMaxDelaySamples = 96000 + 256;
+    using Line = daisysp::DelayLine<float, kMaxDelaySamples>;
 
     void Process(const float *in_l,
                  const float *in_r,
@@ -67,6 +76,7 @@ class Delay : public Effect
     float fb_ = 0.f, mix_ = 0.f, ping_ = 0.f, lo_ = 20.f, hi_ = 18000.f;
 
     daisysp::OnePole hp_l_, hp_r_, lp_l_, lp_r_;
+    Line            *line_l_ = nullptr, *line_r_ = nullptr; // ~386 KB each, SDRAM arena
 };
 
 } // namespace fx

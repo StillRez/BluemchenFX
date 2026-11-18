@@ -7,6 +7,9 @@ CPP_SOURCES = \
 	src/ui/ui.cpp \
 	src/fx/reverb.cpp \
 	src/fx/delay.cpp \
+	src/fx/registry.cpp \
+	src/app/chain.cpp \
+	src/app/chain_settings.cpp \
 	src/app/preset_text.cpp \
 	src/app/preset_store.cpp
 

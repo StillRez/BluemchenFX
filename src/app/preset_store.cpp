@@ -229,7 +229,8 @@ PresetStore::Status PresetStore::Peek(int    slot,
     return Status::OK;
 }
 
-PresetStore::Status PresetStore::Load(int slot, Settings &settings)
+PresetStore::Status
+PresetStore::Load(int slot, uint8_t &effect, EffectState &state, uint8_t &input_mode)
 {
     size_t n;
     Status st = ReadSlot(slot, n);
@@ -240,20 +241,40 @@ PresetStore::Status PresetStore::Load(int slot, Settings &settings)
     if(idx == kPresetBadEffect)
         return Status::BAD_EFFECT;
     if(idx == kPresetNoEffect)
-        idx = settings.effect; // old/hand-written file: current effect
+        idx = effect; // old/hand-written file: current effect
+    if(idx < 0 || idx >= (int)num_effects_)
+        return Status::BAD_EFFECT;
 
-    Settings    tmp = settings;
-    ParseResult res = ParsePreset(
-        *effects_[idx], s_buf, n, tmp.fx[idx], tmp.input_mode);
+    // A file for another effect starts from that effect's defaults
+    EffectState tmp  = state;
+    uint8_t     mode = input_mode;
+    if(idx != effect)
+    {
+        for(size_t i = 0; i < kMaxParams; i++)
+            tmp.norm[i] = i < effects_[idx]->NumParams() ? effects_[idx]->Spec(i).def
+                                                         : 0.f;
+        for(int r = 0; r < SRC_LAST; r++)
+        {
+            int p        = effects_[idx]->DefaultRoute(r);
+            tmp.route[r] = (int8_t)(p >= 0 ? p : kRouteNone);
+        }
+    }
+    ParseResult res = ParsePreset(*effects_[idx], s_buf, n, tmp, mode);
     if(res.applied == 0)
         return Status::PARSE_ERROR;
-    tmp.effect = (uint8_t)idx;
-    settings   = tmp;
+    effect     = (uint8_t)idx;
+    state      = tmp;
+    input_mode = mode;
     return Status::OK;
 }
 
-PresetStore::Status PresetStore::Save(int slot, const Settings &settings)
+PresetStore::Status PresetStore::Save(int                slot,
+                                      uint8_t            effect,
+                                      const EffectState &state,
+                                      uint8_t            input_mode)
 {
+    if(effect >= num_effects_)
+        return Status::BAD_EFFECT;
     // Keep a name the user typed into the file
     char   name[kPresetNameLen];
     char   unused[kEffectNameLen];
@@ -278,9 +299,9 @@ PresetStore::Status PresetStore::Save(int slot, const Settings &settings)
             continue;
         }
 
-        size_t len = SerializePreset(*effects_[settings.effect],
-                                     settings.Active(),
-                                     settings.input_mode,
+        size_t len = SerializePreset(*effects_[effect],
+                                     state,
+                                     input_mode,
                                      name,
                                      s_buf,
                                      sizeof(s_buf));
