@@ -423,6 +423,25 @@ sound.
 - *record the average/peak for REVERB and DELAY at their default settings;*
 - *everything else behaves as before.*
 
+
+## 2026-11-18 — Phase 0 verified on hardware ✅
+
+StillRez flashed the Phase 0 build. The CPU page works, and the CI `host-tests` job is green.
+Measured on the module, each effect alone, with audio playing:
+
+| Effect | Average | Peak |
+|---|---|---|
+| REVERB | 14 % | 17 % |
+| DELAY | 5 % | 5 % |
+
+On the PC the order is reversed (delay 5.9 µs/block vs reverb 2.3). On the STM32 the reverb's
+eight interpolated SDRAM delay lines cost far more (cache misses), so host timings are no
+guide to module cost. The design doc's cost table now says so.
+
+What this means for chaining: even four reverbs (≈ 56 %) fit in a chain, so the current
+effects can't overload the module. Next: phase 1 (chain engine, per-slot instances and SDRAM
+arenas, settings v3 with migration).
+
 ---
 
 ## Open items

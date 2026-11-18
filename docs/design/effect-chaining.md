@@ -133,8 +133,15 @@ At 48 kHz with 32-sample blocks, the callback has **667 µs** per block.
   | Effect | Module avg / peak (single effect, defaults) | Host µs/block |
   |---|---|---|
   | (none: dry passthrough, controls, meters) | *pending* | – |
-  | REVERB | *pending* | 2.3 |
-  | DELAY | *pending* | 5.9 |
+  | REVERB | **14 % / 17 %** (2026-11-18) | 2.3 |
+  | DELAY | **5 % / 5 %** (2026-11-18) | 5.9 |
+
+  The host column has them in the *opposite* order: on the STM32 the reverb's eight
+  interpolated delay lines in SDRAM (cache misses) dominate, while on a PC everything sits in
+  cache. **Host µs are not a guide to module cost**; always measure on the module. Each
+  number includes the fixed overhead (controls, encoder, meters), so a dry baseline will make
+  them slightly smaller. Headroom check: four reverbs in a chain ≈ 4 × 14 % ≈ 56 %, so the
+  current effects fit comfortably in any 4-slot combination.
 
 - Cheap effects (filters, drive, wavefolder, bit/SR reduction, dynamics, tremolo/chorus)
   should cost only a few percent each. The ones to measure before promising anything are
@@ -268,7 +275,7 @@ Each phase is one or more commits and ends with a hardware check by StillRez.
 
 | Phase | Work | Hardware check |
 |---|---|---|
-| 0 | CPU meter + host test harness in CI. No behaviour change. **Done in code (2026-11-18)**, hardware check pending. | CPU % shown, reverb/delay costs recorded |
+| 0 | CPU meter + host test harness in CI. No behaviour change. **Done, verified on hardware (2026-11-18).** | CPU % shown, reverb/delay costs recorded |
 | 1 | Arena + per-slot instances, chain engine, settings v3 + migration. The UI temporarily edits slot 1 only. | Old settings come back in slot 1; no clicks on bypass/swap |
 | 2 | Hierarchical UI: HOME overview, slot pages, setup menu, long press = back. | Build a 2–4 slot chain from the panel; closes #8 |
 | 3 | Chain presets + CC map | Old and new presets load; MIDI CCs reach slots 2–4 |
