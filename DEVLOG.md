@@ -232,6 +232,21 @@ dfu-util's output gave it away. The project Makefile now makes `program-dfu` / `
 `program-boot` depend on `all`. dfu-util's trailing `get_status` error / make `Error 74` is
 harmless (the device resets because of `:leave`) and is now documented.
 
+## 2026-11-18 — Delay + effect selector verified on hardware ✅ (closes #4)
+
+Jeff's test results:
+- v0.3.0 → v2 settings migration: reverb values, routing and input mode carried over ✅
+- Switching REVERB ↔ DELAY; each effect keeps its own parameters ✅
+- TIME changes don't click; echoes already in the buffer pitch-shift as the time changes, which is
+  the expected tape-style behaviour ✅
+- High FEEDBK doesn't run away ✅, but it doesn't really saturate either. It stays fairly clean.
+  Sound tuning is deferred to #7.
+- Delay presets switch effect, and SD slot pages show the effect type ✅
+- HOME page is readable but crowded with 6 bars. Jeff has more UI tweaks in mind (#8).
+- PING / ping-pong wasn't specifically reported, so it isn't confirmed on hardware yet.
+
+Ready to release as **v0.4.0**.
+
 ---
 
 ## Open items
@@ -240,6 +255,8 @@ Tracked as GitHub Issues:
 - ~~#1 Confirm the SD card mounts quickly with the 1-bit-only build~~ (done)
 - #2 Investigate why 4-bit SD transfers fail on the Bluemchen
 - #3 Add a LICENSE (note the DaisySP-LGPL reverb)
-- #4 Effect selector + second effect (delay): switching confirmed on hardware; rest of checklist pending
+- ~~#4 Effect selector + second effect (delay)~~ (done, v0.4.0)
 - #5 Flash headroom: plan the move to the Daisy bootloader
 - #6 Delay: tap tempo and/or MIDI clock sync
+- #7 Delay sound tuning: feedback saturation
+- #8 UI tweaks: HOME page crowding and other improvements
