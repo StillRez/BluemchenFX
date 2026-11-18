@@ -1,6 +1,3 @@
-// The project builds with -Os to fit 128 KB flash; keep the DSP fast.
-#pragma GCC optimize("O2")
-
 #include "fx/reverb.h"
 #include "dev/sdram.h"
 

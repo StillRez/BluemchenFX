@@ -1,5 +1,6 @@
 #include "app/preset_store.h"
 #include "ff_gen_drv.h"
+#include "dev/sdram.h"
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
@@ -33,9 +34,18 @@ struct alignas(32) DmaSafe
 using SafeFs  = DmaSafe<FATFS, offsetof(FATFS, win)>;
 using SafeFil = DmaSafe<FIL, offsetof(FIL, buf)>;
 
-static SafeFs           s_fs;
-static SafeFil          s_file;
-alignas(32) static char s_buf[2048];
+// Everything the SDMMC1 DMA touches lives in SDRAM: in a bootloader
+// (BOOT_SRAM) build ordinary globals land in DTCM, which SDMMC1's DMA can't
+// reach. SDRAM (FMC) is reachable in every build type. It's cached, which
+// is why the cache-line alignment above matters. Not zeroed at boot; FatFS
+// initialises these objects itself (f_mount / f_open).
+static SafeFs DSY_SDRAM_BSS           s_fs;
+static SafeFil DSY_SDRAM_BSS          s_file;
+alignas(32) static char DSY_SDRAM_BSS s_buf[2048];
+
+// Each object is a whole number of cache lines, so nothing else shares one
+static_assert(sizeof(SafeFs) % 32 == 0 && sizeof(SafeFil) % 32 == 0,
+              "keep DMA objects whole cache lines");
 
 static_assert((offsetof(SafeFs, obj) + offsetof(FATFS, win)) % 32 == 0,
               "FATFS window must be cache-line aligned");

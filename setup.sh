@@ -21,7 +21,9 @@ fi
 
 git submodule update --init --recursive
 
-echo "Building libDaisy (size-optimised, needed to fit 128 KB flash)..."
+# libDaisy is built size-optimised: its HAL code isn't performance-critical,
+# and it keeps the legacy internal-flash build (APP_TYPE=BOOT_NONE) possible.
+echo "Building libDaisy (OPT=-Os)..."
 make -C lib/libDaisy clean
 make -C lib/libDaisy -j4 OPT=-Os
 echo "Building DaisySP (+ DaisySP-LGPL)..."

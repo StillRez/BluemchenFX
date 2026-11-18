@@ -20,6 +20,7 @@ Verified on the module unless noted.
 | MIDI | TRS in, UART (`MidiUartHandler` defaults) |
 | microSD | SDMMC1. **1-bit only.** 4-bit transfers never complete on this board, and each failed attempt waits ~172 s (HAL timeout 2^32 clocks @ 25 MHz). Do not re-enable 4-bit ahead of 1-bit. 1-bit at 12.5 MHz: first mount is near-instant (confirmed on hardware, v0.3.0). |
 | Audio | 48 kHz, 32-sample blocks, stereo in/out |
+| Boot | **Daisy bootloader v6.4 (`intdfu-2000ms`) + `APP_TYPE = BOOT_SRAM`** since v0.5.0: app stored in QSPI at `0x90040000`, copied to AXI SRAM at boot. Pending hardware confirmation (#5). |
 
 Pin map originally from https://github.com/recursinging/kxmx_bluemchen (old libDaisy),
 rewritten for current libDaisy in `src/hw/bluemchen.*`.
@@ -38,11 +39,11 @@ make            # -> build/BluemchenFX.bin
   the larger of the two. Release binaries come from CI.
 - Line endings: `.gitattributes` keeps `*.sh` and `Makefile` LF everywhere. Jeff's clone uses
   Git for Windows' CRLF conversion for other text files.
-- **Flash budget: 128 KB internal, ~92 % used with two effects** (119,972 B with GCC 13.3;
-  expect a bit more with Jeff's GCC 10.2). A third effect probably needs the bootloader (#5). The project and libDaisy build with
-  `-Os` to fit. `src/fx/reverb.cpp` opts back into `-O2` with `#pragma GCC optimize`; do the
-  same for new DSP files. If the link fails with "FLASH overflowed", libDaisy was probably built
-  without `OPT=-Os`. The next step for more room is the Daisy bootloader (`APP_TYPE = BOOT_SRAM`).
+- **Memory budget (BOOT_SRAM, the default):** code + rodata in AXI SRAM, **480 KB** (131 KB used,
+  27 %, at `-O2`). `.data`/`.bss` + stack in **DTCM, 128 KB** (57 KB used); the stack grows down
+  from `0x20020000` into whatever's left. Big buffers go in SDRAM (`DSY_SDRAM_BSS`, 64 MB). The
+  project builds at `OPT = -O2`; libDaisy stays `-Os` (setup.sh), which is fine for HAL code.
+  Legacy internal-flash build: `make APP_TYPE=BOOT_NONE OPT=-Os` (91 % of 128 KB, will stop fitting).
 - Submodules are pinned (libDaisy `1289a00`, DaisySP `2c72eaf`, DaisySP-LGPL `c89d380`).
   DaisySP's `.gitmodules` uses `https://www.github.com/...` for DaisySP-LGPL. Some sandboxed
   networks block `www.github.com`; clone `https://github.com/electro-smith/DaisySP-LGPL` at
@@ -52,10 +53,15 @@ make            # -> build/BluemchenFX.bin
 
 ## Flashing
 
-DFU: hold BOOT, tap RESET, then either `make program-dfu` (the project Makefile makes it rebuild
-first; libDaisy's own target doesn't, which once flashed stale firmware) or the Daisy Web Programmer
-(https://flash.daisy.audio/, choose "DFU in FS Mode", not "Daisy Bootloader"). On Windows,
-Zadig/WinUSB may be needed once. dfu-util's trailing `Error during download get_status` /
+Two levels:
+1. **Bootloader, once per module:** system DFU (hold BOOT, tap RESET), then `make program-boot`
+   (installs `lib/libDaisy/core/dsy_bootloader_v6_4-intdfu-2000ms.bin` to internal flash), or the
+   web programmer's "DFU in FS Mode" with that file. Settings in QSPI survive this.
+2. **App, every update:** tap RESET, then tap BOOT within the ~2 s grace period (LED keeps
+   pulsing), then `make program-dfu` (the project Makefile makes it rebuild first; libDaisy's own
+   target doesn't, which once flashed stale firmware), or the web programmer's "Daisy Bootloader"
+   with the `.bin`.
+On Windows, Zadig/WinUSB may be needed once. dfu-util's trailing `Error during download get_status` /
 make `Error 74` after "File downloaded successfully" is normal: the Daisy resets because of `:leave`.
 
 ## Code map
@@ -94,10 +100,17 @@ sd-card/BLUEMCHN/       example presets
 - **Audio ISR vs main loop:** the audio callback is the only writer of encoder counters and
   `effective[]`. The main loop writes `settings` (benign races on float/byte stores). Never do
   SD, QSPI, or display I/O in the audio callback.
+- **DMA-reachable memory:** in BOOT_SRAM builds ordinary globals land in **DTCM**, which most
+  DMA engines (incl. SDMMC1) can't reach. Anything a peripheral DMAs into or out of goes in
+  SDRAM (`DSY_SDRAM_BSS`, cacheable, so 32-byte align it and make it whole cache lines) or in
+  libDaisy's `DMA_BUFFER_MEM_SECTION` (D2 SRAM, uncached). Check with `arm-none-eabi-nm`:
+  `0x2000xxxx` = DTCM = wrong for DMA.
 - **SD:** mount lazily, never at boot. Every mount attempt must `f_mount(NULL)`,
   `SdmmcHandler::Reset()`, and clear `disk.is_initialized[pdrv]` (libDaisy's FatFS glue latches
   that flag even when init fails). FatFS objects must keep their sector buffers 32-byte aligned
   (`DmaSafe` wrapper + `static_assert`s), because libDaisy's DMA cache maintenance works on whole lines.
+  They live in SDRAM (see DMA-reachable memory). Don't put `.bin` files in the SD root: the
+  bootloader flashes the first one it finds there at power-up.
 - **Preset text format** is documented in `src/app/preset_text.h` and the README. Keep it
   forward-compatible: unknown keys ignored, missing keys keep current values.
 - **Knob takeover:** knobs only take control after moving > 0.03; encoder edits, MIDI CC and

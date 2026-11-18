@@ -12,13 +12,31 @@ rewritten against today's libDaisy API (named `seed::Dxx` pins, current `Encoder
 
 ## Quick start
 
-**Flash the prebuilt binary** (`prebuilt/BluemchenFX.bin`, or the `.bin` attached to each [release](https://github.com/jeffreykrueger/BluemchenFX/releases)): put the Daisy in DFU mode (hold BOOT, tap RESET), then either
-drag `prebuilt/BluemchenFX.bin` into the [Daisy Web Programmer](https://electro-smith.github.io/Programmer/),
-or run:
+BluemchenFX runs through the **Daisy bootloader** (since v0.5.0). The firmware is stored in the
+Seed's 8 MB QSPI flash and runs from its 480 KB SRAM, so there's room for bigger effects than the
+128 KB internal flash allows. That means two steps: install the bootloader once, then flash
+the firmware through it.
 
-```
-dfu-util -a 0 -s 0x08000000:leave -D prebuilt/BluemchenFX.bin -d ,0483:df11
-```
+### 1. Install the bootloader (once per module)
+
+Put the Daisy in **system DFU mode**: hold BOOT, tap RESET, release BOOT. Then either:
+- `make program-boot` (flashes `lib/libDaisy/core/dsy_bootloader_v6_4-intdfu-2000ms.bin`), or
+- in the [Daisy Web Programmer](https://flash.daisy.audio/), connect to **DFU in FS Mode** and flash
+  that same `.bin` file.
+
+Your saved settings are kept: they live in QSPI, and installing the bootloader only rewrites the
+internal flash.
+
+### 2. Flash the firmware
+
+Put the bootloader in **flashing mode**: tap RESET, then tap BOOT within ~2 seconds. The Seed's LED
+keeps pulsing slowly, waiting for you. Then either:
+- `make program-dfu` (builds first if needed), or
+- in the [Daisy Web Programmer](https://flash.daisy.audio/), connect to **Daisy Bootloader** and
+  flash `prebuilt/BluemchenFX.bin` or the `.bin` from a [release](https://github.com/jeffreykrueger/BluemchenFX/releases).
+
+From then on, every power-up spends ~2 seconds in the bootloader (LED pulsing) before
+BluemchenFX starts.
 
 **Build from source** (needs the [Daisy Toolchain](https://github.com/electro-smith/DaisyWiki/wiki/1.-Setting-Up-Your-Development-Environment); on Windows use Git Bash):
 
@@ -27,7 +45,8 @@ git clone --recursive https://github.com/jeffreykrueger/BluemchenFX.git
 cd BluemchenFX
 ./setup.sh          # once: fetches libDaisy + DaisySP (pinned submodules) and builds them
 make                # builds build/BluemchenFX.bin
-make program-dfu    # rebuilds if needed, then flashes over USB (DFU mode)
+make program-boot   # once per module: installs the Daisy bootloader (system DFU mode)
+make program-dfu    # rebuilds if needed, then flashes via the bootloader
 ```
 
 `make program-dfu` usually ends with `Error during download get_status` / `Error 74` right after
@@ -203,15 +222,19 @@ If you need a binary with no LGPL code, remove the reverb (`src/fx/reverb.*` and
 
 ## Notes
 
-- **Flash usage is ~92 % of the 128 KB internal flash** (two effects).
-  A third effect will likely need the bootloader (issue #5). To make room for the SD card code, the
-  project and libDaisy are built with `-Os` (size); the DSP files opt back in to `-O2`
-  with a pragma, and DaisySP stays at its normal optimisation. If you set the project up
-  before this change, re-run `./setup.sh` to rebuild libDaisy with `OPT=-Os`, otherwise the
-  link fails with "FLASH overflowed". For much bigger effects, switch to the Daisy bootloader
-  (`APP_TYPE = BOOT_SRAM` in the Makefile, `make program-boot`).
-  If you use the bootloader, settings are stored at the very end of QSPI (`kFlashOffset` in
-  `main.cpp`) which stays clear of the bootloader's program area.
+- **Memory:** the bootloader build (`APP_TYPE = BOOT_SRAM`, the default) runs code from the
+  480 KB AXI SRAM (~27 % used with two effects, at `-O2`). Variables and the stack live in the
+  128 KB DTCM (~45 % used), and effect buffers live in the 64 MB SDRAM. Settings are stored in
+  the last 4 KB of QSPI, far from the program area that starts at `0x90040000`. libDaisy is
+  built with `-Os` (`setup.sh`), because its hardware code isn't performance-critical.
+- **Without the bootloader:** `make APP_TYPE=BOOT_NONE OPT=-Os` still builds the old
+  internal-flash version (91 % of 128 KB) and flashes in system DFU mode. It will stop fitting as
+  effects grow.
+- **Don't put `.bin` files in the SD card's root folder.** During its 2-second startup window the
+  bootloader looks for firmware there and would flash it. Presets live in `BLUEMCHN/`, which it
+  ignores. Deliberately copying `BluemchenFX.bin` to the root should update the firmware without
+  USB, but that's untested on the Bluemchen: the bootloader uses its own SD driver, and this board
+  has trouble with 4-bit SD transfers (see the SD notes above).
 - The decay display is an RT60 estimate from ReverbSc's mean loop delay; a host-side check measured
   roughly 0.53 s / 1.8 s / 6.7 s for settings of 0.5 s / 2 s / 8 s (Hi Cut damping shortens long tails a bit).
 - Settings saved by v0.3.0 (single-effect layout) are converted automatically on first boot

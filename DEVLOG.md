@@ -257,6 +257,44 @@ Ready to release as **v0.4.0**.
   compatible with MIT. The relinking requirement is met by the public source, pinned submodules
   and build scripts. Removing the reverb gives an LGPL-free build.
 
+## 2026-11-18 — Daisy bootloader: run from SRAM (#5)
+
+Jeff plans more complex effects and effect chaining, and internal flash was at 92 %.
+
+**Change:** `APP_TYPE = BOOT_SRAM` with the Daisy bootloader v6.4 (`intdfu-2000ms`, the one libDaisy
+ships and Jeff already has). The app is stored in QSPI at `0x90040000` and copied to AXI SRAM at boot.
+- Code: **131 KB of 480 KB SRAM (27 %)** at `-O2`, so the size tricks went away: project `OPT`
+  back to `-O2`, and the `#pragma GCC optimize("O2")` lines removed from the DSP files.
+  libDaisy stays `-Os` (HAL code, not performance-critical, no rebuild needed).
+- Variables + stack: DTCM, 57 KB of 128 KB. Effect buffers: SDRAM as before.
+- Legacy build still possible: `make APP_TYPE=BOOT_NONE OPT=-Os` → 119,308 B (91 %).
+
+**Bug avoided:** in BOOT_SRAM builds `.data`/`.bss` move from AXI SRAM to **DTCM**, which SDMMC1's
+DMA can't access. The first BOOT_SRAM link put the SD buffers (`s_fs`, `s_file`, `s_buf`) at
+`0x2000xxxx`, which would have broken SD presets on the module. They're now in SDRAM
+(`DSY_SDRAM_BSS`, `0xC011xxxx`, still 32-byte aligned). libDaisy's SD driver has no scratch
+buffer, so all DMA goes straight into these. libDaisy's own DMA buffers (audio, ADC, UART)
+already use `DMA_BUFFER_MEM_SECTION` (D2 SRAM).
+
+**Checked against libDaisy / the bootloader docs:**
+- QSPI is still initialised for SRAM apps (only skipped for apps running from QSPI), so saving
+  settings to QSPI keeps working. Settings at `0x907FF000` are far from the app area.
+- Bootloader limits: ≤ 480 KB for SRAM apps (it reserves the last 32 KB of SRAM).
+- During its 2.5 s grace period the bootloader scans the **SD card root** for `.bin` files and
+  flashes the first valid one. Presets in `BLUEMCHN/` are ignored.
+- `make program-boot` installs the bootloader. The project's "rebuild before flashing" rule now
+  applies to `program-dfu` / `program` only.
+
+**Flashing workflow change:** install the bootloader once (system DFU), then flash the app
+during the bootloader's grace period (tap RESET, then tap BOOT). Every power-up now waits ~2 s
+in the bootloader before BluemchenFX starts.
+
+*Status: compiled; memory layout checked with `nm` / `objdump`. Not yet run on hardware. To
+confirm on the module: bootloader install, app flash via the bootloader, settings survive, SD
+presets load/save (the DMA-in-SDRAM change), audio/UI normal. Also check **boot time with an SD
+card inserted**: the bootloader scans the card with its own driver, and this board's 4-bit SD
+trouble could slow that scan.*
+
 ---
 
 ## Open items
