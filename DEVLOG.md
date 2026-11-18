@@ -364,6 +364,22 @@ Docs only. **No code changed, nothing compiled or verified on hardware.**
   bypass default) need StillRez's answers before phase 1. Phase 0 (CPU meter + host tests) doesn't
   depend on them.
 
+
+## 2026-11-18 — Effect chaining: design questions answered
+
+Docs only. **No code changed.**
+
+StillRez's answers, now in `docs/design/effect-chaining.md`:
+- **SDRAM:** 8 MB per slot (≈ 21 s stereo) plus a 24 MB large pool (≈ 65 s looper), one slot
+  at a time.
+- **Recall:** switching a slot back to an effect type restores that slot's previous settings
+  for it. RAM only; it doesn't survive a power cycle.
+- **Presets:** a preset is the whole chain. Slots it doesn't mention are emptied.
+- **CPU overload:** warn only (CPU bar inverts, `CPU!`). Nothing is refused or auto-bypassed.
+- **Bypass:** per-slot TRAILS / HARD, default TRAILS.
+
+The design is approved. Next: phase 0 (CPU meter + host test harness).
+
 ---
 
 ## Open items

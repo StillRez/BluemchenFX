@@ -1,6 +1,6 @@
 # Design: effect chaining
 
-Status: **draft for review**. Nothing here is implemented yet. Date: 2026-11-18.
+Status: **approved design**, not implemented yet. Date: 2026-11-18. All open questions answered.
 
 ## Decisions already made (StillRez, 2026-11-18)
 
@@ -10,6 +10,11 @@ Status: **draft for review**. Nothing here is implemented yet. Date: 2026-11-18.
 | Topology | **Serial now**, with **parallel later**. The engine must not paint us into a corner. |
 | Long press | Means **back** (up one level). Saving moves to an explicit SAVE item. |
 | Effects planned | Modulation (chorus/flanger/phaser/tremolo), filters/drive, pitch/granular, looper/sampler, wavefolders, dynamics (compressor, limiter), sample-rate reduction and bit reduction. |
+| SDRAM split (Q1) | **8 MB per slot + 24 MB shared large pool.** |
+| Type change and back (Q2) | **Recall previous settings** per slot and type. |
+| Preset with fewer slots (Q3) | **Empty the slots it doesn't mention.** A preset is the whole chain. |
+| CPU overload (Q4) | **Warn only.** |
+| Bypass (Q5) | **Per-slot choice, default trails.** |
 
 ## Goals and non-goals
 
@@ -67,8 +72,8 @@ Proposed SDRAM layout (64 MB total):
 
 | Region | Size | Used for |
 |---|---|---|
-| Slot arenas 1–4 | 4 × 6 MB | normal effects (reverb ≈ 0.4 MB, delay ≈ 0.8 MB, a 10 s stereo delay ≈ 3.7 MB) |
-| Large pool | 32 MB | **one** slot at a time may claim it: looper/sampler (≈ 87 s stereo at 48 kHz), long granular buffers |
+| Slot arenas 1–4 | 4 × 8 MB | normal effects (reverb ≈ 0.4 MB, delay ≈ 0.8 MB); up to ≈ 21 s of stereo float audio per slot |
+| Large pool | 24 MB | **one** slot at a time may claim it: looper/sampler (≈ 65 s stereo at 48 kHz), long granular buffers |
 | Free | 8 MB | SD buffers, future use |
 
 An effect whose `kSdramBytes` exceeds a slot arena is marked "large". Picking it in a second
@@ -78,19 +83,27 @@ slot while the pool is taken shows "POOL BUSY" and is refused.
 
 Both run per slot. The other slots keep playing.
 
-- **Bypass:** an equal-gain crossfade of ~10 ms between the slot's input and its output.
-  Option for later: *trails* bypass, where the input to a reverb/delay is muted but its tail
-  keeps ringing out. This is cheap to add once crossfades exist, so it's a per-slot setting
-  rather than a redesign.
+- **Bypass** is a per-slot setting, **trails by default**:
+  - *Trails:* the effect's input fades to silence over ~10 ms while the dry signal passes; the
+    effect keeps running so tails ring out and its wet output fades away naturally. Effects
+    without tails (filters, drive, dynamics) behave like a hard bypass in this mode.
+  - *Hard:* an equal-gain ~10 ms crossfade from the slot's output to its input; the effect
+    stops running (saves CPU).
 - **Type change** (from the main loop, never the ISR):
   1. Fade the slot to its input (it becomes a wire) and set its `swapping` flag.
   2. Wait one audio block. The ISR now skips the slot's `fx`.
   3. Destroy the old object, reset the arena, placement-new and `Init()` the new type, load
-     its defaults (or recalled params, see open question Q2), then `Reset()`.
+     its recalled params (see below), then `Reset()`.
   4. Clear `swapping` and fade back in.
 
   This is the existing global `switching` mechanism scoped to one slot. Init of a large
   buffer happens in step 3 with audio still running through the other slots, so no dropouts.
+
+- **Param recall:** each slot keeps the last `norm[8]` for every effect type it has hosted
+  (`recall[slot][type]`, 32 bytes each, ≈ 2 KB for 16 types). Switching a slot back to a type
+  restores its settings; a type the slot never had gets defaults. The recall table is RAM
+  only (it doesn't survive a power cycle); the active settings of each slot are saved as
+  usual. Loading a preset updates recall for the types it sets.
 
 ### 1.4 Signal flow and parallel later
 
@@ -112,8 +125,8 @@ At 48 kHz with 32-sample blocks, the callback has **667 µs** per block.
   (`CPU 43% PK 61%`).
 - Measure each effect on hardware and record its cost in a table in this doc. This shows which
   chains fit.
-- **Overload policy:** if peak load passes ~95%, show a warning (invert the CPU bar). We don't
-  auto-bypass anything; the user stays in control. See Q4.
+- **Overload policy:** warn only. If peak load passes ~95%, the CPU bar inverts and the setup
+  page shows `CPU!`. Nothing is refused or auto-bypassed; the user stays in control.
 - Cheap effects (filters, drive, wavefolder, bit/SR reduction, dynamics, tremolo/chorus)
   should cost only a few percent each. The ones to measure before promising anything are
   reverb (ReverbSc), pitch shifting and granular. The block size stays at 32 unless
@@ -124,7 +137,7 @@ At 48 kHz with 32-sample blocks, the callback has **667 µs** per block.
 ```cpp
 struct SlotState {           // 36 bytes
     uint8_t type;            // EffectId or FX_NONE
-    uint8_t flags;           // bit0 bypass, bit1 trails
+    uint8_t flags;           // bit0 bypass, bit1 hard bypass (0 = trails, the default)
     uint8_t pad[2];
     float   norm[8];
 };
@@ -181,8 +194,8 @@ cv2    = none
 - A file **without** `[slotN]` sections is an old single-effect preset. It loads into slot 1,
   clears slots 2–4, and its routes like `knob1 = decay` mean slot 1.
 - A section without `effect =` keeps that slot's current type. A missing section empties the
-  slot, so a preset always fully defines the chain. Q3 asks whether you'd rather it left
-  other slots alone.
+  slot, so a preset always fully defines the chain and recalls exactly.
+- Per slot: `bypass = on|off`, `bypass_mode = trails|hard` (default trails).
 - Unknown keys are ignored, as today.
 
 ## 4. UI
@@ -204,7 +217,7 @@ Controls:
 - **Long press on HOME** saves to flash. HOME has no "back", so the existing habit survives.
 
 **Slot pages** (one page per item, as today):
-`TYPE` → `BYPASS` → the effect's params. Turn moves between pages, click edits, long press
+`TYPE` → `BYPASS` (OFF / ON) → `BYP MODE` (TRAILS / HARD) → the effect's params. Turn moves between pages, click edits, long press
 goes back to HOME. Changing `TYPE` on a populated slot asks for a confirmation click
 (`DELAY→REV?`), since it replaces the params.
 
@@ -257,12 +270,4 @@ independent), #2 (4-bit SD, independent).
 
 ## 8. Open questions
 
-- **Q1. Arena sizes.** Is 4 × 6 MB per slot plus a 32 MB shared large pool OK? The pool means
-  only one looper or long sampler at a time.
-- **Q2. Param recall on type change.** When a slot goes DELAY → REVERB → DELAY, should it get
-  the delay's previous params back (per-slot, per-type memory in RAM) or defaults?
-- **Q3. Presets that list fewer slots.** Should loading a preset empty the slots it doesn't
-  mention (proposed: yes, a preset is a whole chain), or leave them as they are?
-- **Q4. CPU overload.** Is "warn only" right, or should a slot that pushes the load over the
-  limit refuse to be added?
-- **Q5. Bypass default.** Hard bypass (cuts tails) or trails (lets reverb/delay ring out)?
+None. Q1–Q5 were answered on 2026-11-18 (see the table at the top).
