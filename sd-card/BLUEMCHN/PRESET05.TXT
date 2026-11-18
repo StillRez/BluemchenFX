@@ -1,0 +1,22 @@
+# BluemchenFX preset
+# Edit with any text editor. '#' starts a comment.
+# Lines you delete keep the module's current value.
+
+name   = Mono Wash
+effect = REVERB
+
+# input: stereo | mono (mono = left input feeds both channels)
+input  = mono
+
+# parameters, in real units (k = x1000, e.g. 8.5k)
+decay  = 20.00      # 0.20 .. 30.00 s
+mix    = 70         # 0 .. 100 %
+lo_cut = 300        # 20 .. 1000 Hz
+hi_cut = 5000       # 500 .. 18000 Hz
+
+# routing: none | decay | mix | lo_cut | hi_cut
+# knobs set the value directly, CV adds +-5V = +-full range
+knob1  = decay
+knob2  = mix
+cv1    = decay
+cv2    = hi_cut
