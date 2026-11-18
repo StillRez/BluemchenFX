@@ -1,0 +1,73 @@
+name: Build firmware
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write # needed to publish releases on tags
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install ARM GCC (xPack 13.3.1-1.1)
+        run: |
+          curl -sSL -o /tmp/arm.tgz \
+            https://github.com/xpack-dev-tools/arm-none-eabi-gcc-xpack/releases/download/v13.3.1-1.1/xpack-arm-none-eabi-gcc-13.3.1-1.1-linux-x64.tar.gz
+          mkdir -p /tmp/tc && tar xzf /tmp/arm.tgz -C /tmp/tc
+          echo "/tmp/tc/xpack-arm-none-eabi-gcc-13.3.1-1.1/bin" >> "$GITHUB_PATH"
+
+      - name: Cache library builds
+        uses: actions/cache@v4
+        with:
+          path: |
+            lib/libDaisy/build
+            lib/DaisySP/build
+            lib/DaisySP/DaisySP-LGPL/build
+          key: libs-os-${{ hashFiles('.gitmodules') }}-${{ github.sha }}
+          restore-keys: libs-os-${{ hashFiles('.gitmodules') }}-
+
+      - name: Build libDaisy (-Os) and DaisySP
+        run: |
+          make -C lib/libDaisy -j"$(nproc)" OPT=-Os
+          make -C lib/DaisySP -j"$(nproc)"
+
+      - name: Build firmware
+        run: |
+          set -o pipefail
+          make -j"$(nproc)" 2>&1 | tee build.log
+
+      - name: Report flash usage
+        run: |
+          echo '### Memory usage' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep -E "^ +(FLASH|SRAM|SDRAM|QSPIFLASH):" build.log >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check prebuilt binary is current
+        run: |
+          if cmp -s build/BluemchenFX.bin prebuilt/BluemchenFX.bin; then
+            echo "prebuilt/BluemchenFX.bin matches this build"
+          else
+            echo "::warning::prebuilt/BluemchenFX.bin differs from this build - copy build/BluemchenFX.bin to prebuilt/"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BluemchenFX-${{ github.sha }}
+          path: build/BluemchenFX.bin
+
+      - name: Publish release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/BluemchenFX.bin
+          generate_release_notes: true

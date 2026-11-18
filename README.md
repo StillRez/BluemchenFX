@@ -1,5 +1,7 @@
 # BluemchenFX
 
+[![Build firmware](https://github.com/jeffreykrueger/BluemchenFX/actions/workflows/build.yml/badge.svg)](https://github.com/jeffreykrueger/BluemchenFX/actions/workflows/build.yml)
+
 Clean-slate effect firmware for the **kxmx Bluemchen** (Daisy Seed, 4HP), built on current
 [libDaisy](https://github.com/electro-smith/libDaisy) and [DaisySP](https://github.com/electro-smith/DaisySP).
 The first effect is a stereo reverb with decay time, dry/wet mix and filtering, all set from the
@@ -10,7 +12,7 @@ rewritten against today's libDaisy API (named `seed::Dxx` pins, current `Encoder
 
 ## Quick start
 
-**Flash the prebuilt binary:** put the Daisy in DFU mode (hold BOOT, tap RESET), then either
+**Flash the prebuilt binary** (`prebuilt/BluemchenFX.bin`, or the `.bin` attached to each [release](https://github.com/jeffreykrueger/BluemchenFX/releases)): put the Daisy in DFU mode (hold BOOT, tap RESET), then either
 drag `prebuilt/BluemchenFX.bin` into the [Daisy Web Programmer](https://electro-smith.github.io/Programmer/),
 or run:
 

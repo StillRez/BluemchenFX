@@ -144,12 +144,26 @@ DAT1–DAT3 routing or pull-ups on the board are the first suspect.
 
 ---
 
-## Open items / ideas
+## 2026-11-18 — Project infrastructure
 
-- Confirm fast SD mount with the 1-bit-only build.
-- Find out why 4-bit SD fails (scope DAT1–3, check pull-ups against the kxmx schematic).
-- Flash is at ~86 %. For more effects, move to the Daisy bootloader (`APP_TYPE = BOOT_SRAM`).
-  Settings live at the end of QSPI, clear of the bootloader's program area.
-- More effects through the `fx::Effect` interface (delay, chorus, …), with an effect selector page.
-- License: ReverbSc is LGPL (DaisySP-LGPL), which matters if binaries are distributed.
-  Pick a license for this repo's own code.
+- Code is on GitHub (github.com/jeffreykrueger/BluemchenFX), with libDaisy / DaisySP / DaisySP-LGPL
+  pinned as submodules. A fresh `git clone --recursive` + `setup.sh` + `make` reproduced
+  `prebuilt/BluemchenFX.bin` byte for byte.
+- `CLAUDE.md` holds the hardware facts, build quirks, conventions and workflow, so a new
+  session starts with the context instead of rediscovering it.
+- GitHub Actions (`.github/workflows/build.yml`) builds every push with the same xPack GCC
+  13.3.1, reports flash usage, warns if `prebuilt/` is stale, uploads the `.bin` as an artifact,
+  and publishes a GitHub Release with the `.bin` for `v*` tags.
+- Open items moved to GitHub Issues (#1–#5).
+- `v0.3.0` tagged: reverb + mono/stereo + SD text presets, 1-bit SD. Marked pre-release until #1 is confirmed.
+
+---
+
+## Open items
+
+Tracked as GitHub Issues:
+- #1 Confirm the SD card mounts quickly with the 1-bit-only build
+- #2 Investigate why 4-bit SD transfers fail on the Bluemchen
+- #3 Add a LICENSE (note the DaisySP-LGPL reverb)
+- #4 Effect selector + second effect (e.g. delay)
+- #5 Flash headroom: plan the move to the Daisy bootloader
