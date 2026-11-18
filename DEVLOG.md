@@ -331,8 +331,17 @@ stays **solid on**. The OLED stays blank and there's no audio. Same with or with
   wrong mode), so the bootloader had nothing valid to start. No firmware bug. README/CLAUDE.md now
   spell out the button sequence and the "incompatible binary" / solid-LED symptoms.
 
-*Pending: flash the normal build the right way and run the #5 checklist (settings, saving, SD
-presets, power-up with a card).*
+## 2026-11-18 — Bootloader build verified on hardware ✅ (closes #5)
+
+Normal build flashed through the Daisy bootloader. Jeff's checklist all passed:
+- Saved settings carried over (both effects, routing, input mode) ✅
+- Saving (long press) persists across a power cycle ✅
+- SD presets load and save, with the FatFS/DMA buffers now in SDRAM ✅
+- Power-up with an SD card inserted: no noticeable delay from the bootloader's SD scan ✅
+- Audio and UI as before ✅
+
+Room for growth: code at 27 % of 480 KB SRAM, DTCM at 45 %, SDRAM effectively unlimited.
+Ready to release as **v0.5.0**: the first release that requires the Daisy bootloader.
 
 ---
 
@@ -343,7 +352,7 @@ Tracked as GitHub Issues:
 - #2 Investigate why 4-bit SD transfers fail on the Bluemchen
 - ~~#3 Add a LICENSE~~ (done: MIT)
 - ~~#4 Effect selector + second effect (delay)~~ (done, v0.4.0)
-- #5 Flash headroom: plan the move to the Daisy bootloader
+- ~~#5 Flash headroom: move to the Daisy bootloader~~ (done, v0.5.0)
 - #6 Delay: tap tempo and/or MIDI clock sync
 - #7 Delay sound tuning: feedback saturation
 - #8 UI tweaks: HOME page crowding and other improvements
