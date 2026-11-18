@@ -20,7 +20,7 @@ Verified on the module unless noted.
 | MIDI | TRS in, UART (`MidiUartHandler` defaults) |
 | microSD | SDMMC1. **1-bit only.** 4-bit transfers never complete on this board, and each failed attempt waits ~172 s (HAL timeout 2^32 clocks @ 25 MHz). Do not re-enable 4-bit ahead of 1-bit. 1-bit at 12.5 MHz: first mount is near-instant (confirmed on hardware, v0.3.0). |
 | Audio | 48 kHz, 32-sample blocks, stereo in/out |
-| Boot | **Daisy bootloader v6.4 (`intdfu-2000ms`) + `APP_TYPE = BOOT_SRAM`** since v0.5.0: app stored in QSPI at `0x90040000`, copied to AXI SRAM at boot. Pending hardware confirmation (#5). |
+| Boot | **Daisy bootloader v6.4 (`intdfu-2000ms`) + `APP_TYPE = BOOT_SRAM`** since v0.5.0: app stored in QSPI at `0x90040000`, copied to AXI SRAM at boot. Bootloader hand-over verified (`tools/bootcheck`), and the firmware boots to the UI from SRAM (DIAG build). |
 
 Pin map originally from https://github.com/recursinging/kxmx_bluemchen (old libDaisy),
 rewritten for current libDaisy in `src/hw/bluemchen.*`.
@@ -57,8 +57,11 @@ Two levels:
 1. **Bootloader, once per module:** system DFU (hold BOOT, tap RESET), then `make program-boot`
    (installs `lib/libDaisy/core/dsy_bootloader_v6_4-intdfu-2000ms.bin` to internal flash), or the
    web programmer's "DFU in FS Mode" with that file. Settings in QSPI survive this.
-2. **App, every update:** tap RESET, then tap BOOT within the ~2 s grace period (LED keeps
-   pulsing), then `make program-dfu` (the project Makefile makes it rebuild first; libDaisy's own
+2. **App, every update:** tap and release RESET, wait for the LED to pulse, then tap BOOT
+   *while it pulses* (rapid blinks, then it keeps pulsing). BOOT held during RESET = STM system DFU
+   instead, which can't take a BOOT_SRAM app: the web programmer then says "incompatible binary",
+   and a mis-flash leaves the bootloader with no program (LED pulses then goes solid, OLED blank).
+   That's exactly what happened on the first v0.5.0 attempt. Then then `make program-dfu` (the project Makefile makes it rebuild first; libDaisy's own
    target doesn't, which once flashed stale firmware), or the web programmer's "Daisy Bootloader"
    with the `.bin`.
 On Windows, Zadig/WinUSB may be needed once. dfu-util's trailing `Error during download get_status` /
@@ -115,6 +118,9 @@ sd-card/BLUEMCHN/       example presets
   forward-compatible: unknown keys ignored, missing keys keep current values.
 - **Knob takeover:** knobs only take control after moving > 0.03; encoder edits, MIDI CC and
   preset loads disengage them.
+- **Hardware debugging without a debugger:** `make DIAG=1 BUILD_DIR=build-diag` (LED blinks after
+  `seed.Init`, OLED shows each startup step via `Diag()` in `main.cpp`); `tools/bootcheck` is a
+  minimal BOOT_SRAM program to test the bootloader path on its own.
 - Jeff's working copy is a clone at `C:\Coding Projects\BluemchenFX` (Windows, Git Bash +
   Daisy Toolchain). He gets changes with `git pull` (and `git submodule update --init --recursive`
   if submodule pins change). The old non-git folder `C:\Coding Projects\Daisy effects module`

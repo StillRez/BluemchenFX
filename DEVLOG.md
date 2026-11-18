@@ -319,6 +319,21 @@ stays **solid on**. The OLED stays blank and there's no audio. Same with or with
   LED on until the OLED is up, then shows each startup step (`1 HW OK` … `6 AUDIO ON`).
   The last step shown locates the hang.
 
+**Result (same evening):**
+- The web programmer refused `bootcheck.bin` with "incompatible binary, try entering the Daisy
+  bootloader". The module was in **STM system DFU**, not the Daisy bootloader: BOOT was pressed
+  during RESET instead of during the bootloader's pulse.
+- With the right sequence (release RESET, wait for the pulse, then tap BOOT), `bootcheck` ran: LED
+  blinking, "BOOT OK" + counter ✅. So the bootloader and hand-over work.
+- `BluemchenFX-diag.bin` booted through every step to the normal UI ✅. The firmware is fine
+  from SRAM.
+- **Conclusion:** the first v0.5.0 attempt most likely never got the app into QSPI (flashed in the
+  wrong mode), so the bootloader had nothing valid to start. No firmware bug. README/CLAUDE.md now
+  spell out the button sequence and the "incompatible binary" / solid-LED symptoms.
+
+*Pending: flash the normal build the right way and run the #5 checklist (settings, saving, SD
+presets, power-up with a card).*
+
 ---
 
 ## Open items

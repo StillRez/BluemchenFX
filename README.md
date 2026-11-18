@@ -29,14 +29,29 @@ internal flash.
 
 ### 2. Flash the firmware
 
-Put the bootloader in **flashing mode**: tap RESET, then tap BOOT within ~2 seconds. The Seed's LED
-keeps pulsing slowly, waiting for you. Then either:
+Put the bootloader in **flashing mode**: tap and **release** RESET, wait for the Seed's LED to start
+its slow pulse, and **while it's pulsing** tap BOOT once. You'll see a few rapid blinks, then the slow
+pulse continues indefinitely, waiting for you. (Pressing BOOT *during* RESET instead enters the
+STM system DFU mode, which can't load this firmware.) Then either:
 - `make program-dfu` (builds first if needed), or
 - in the [Daisy Web Programmer](https://flash.daisy.audio/), connect to **Daisy Bootloader** and
   flash `prebuilt/BluemchenFX.bin` or the `.bin` from a [release](https://github.com/jeffreykrueger/BluemchenFX/releases).
 
 From then on, every power-up spends ~2 seconds in the bootloader (LED pulsing) before
 BluemchenFX starts.
+
+**Troubleshooting**
+- Web programmer says *"Attempting to flash an incompatible binary. Try entering the Daisy
+  bootloader"*: the module is in system DFU mode, not the Daisy bootloader. Redo the
+  RESET → wait for pulse → BOOT sequence and connect to **Daisy Bootloader**.
+- `dfu-util -l` tells you which mode you're in: the Daisy bootloader lists a QSPI region (`0x90…`),
+  while system DFU lists only `@Internal Flash /0x08000000/…`.
+- LED pulses briefly at power-up and then stays solid, with a blank OLED: the bootloader has no
+  valid program to start, usually because the last flash went to the wrong mode. Flash the
+  firmware again in the Daisy bootloader.
+- For deeper problems, `make DIAG=1 BUILD_DIR=build-diag` builds a version that blinks the LED and
+  shows each startup step on the OLED, and `tools/bootcheck` is a minimal test program for the
+  bootloader itself.
 
 **Build from source** (needs the [Daisy Toolchain](https://github.com/electro-smith/DaisyWiki/wiki/1.-Setting-Up-Your-Development-Environment); on Windows use Git Bash):
 
