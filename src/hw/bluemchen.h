@@ -2,7 +2,8 @@
 /**
  * Bluemchen hardware abstraction (clean rewrite for current libDaisy).
  *
- * Pin map taken from recursinging/kxmx_bluemchen (src/kxmx_bluemchen.cpp):
+ * Pin map and init sequence based on recursinging/kxmx_bluemchen
+ * (src/kxmx_bluemchen.cpp, MIT License, Copyright (c) 2020 recursinging):
  *   Encoder A / B / Click : D27 / D26 / D28
  *   Pot 1 / Pot 2         : D16 (A1) / D15 (A0)
  *   CV 1  / CV 2          : D21 (A6) / D18 (A3)

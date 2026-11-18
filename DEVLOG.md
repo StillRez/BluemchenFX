@@ -247,6 +247,16 @@ Jeff's test results:
 
 Ready to release as **v0.4.0**.
 
+## 2026-11-18 — License: MIT (closes #3)
+
+- Jeff wants the project fully open source and chose **MIT** (over GPL-3.0), matching
+  kxmx_bluemchen, libDaisy and DaisySP. `LICENSE` © 2026 Jeff Krueger.
+- README has a License section crediting libDaisy (MIT), DaisySP (MIT), DaisySP-LGPL (LGPL-2.1,
+  `ReverbSc`) and kxmx_bluemchen (MIT, the pin map basis, also credited in `src/hw/bluemchen.h`).
+- LGPL note: ReverbSc is statically linked, so the released `.bin` contains LGPL-2.1 code. That's
+  compatible with MIT. The relinking requirement is met by the public source, pinned submodules
+  and build scripts. Removing the reverb gives an LGPL-free build.
+
 ---
 
 ## Open items
@@ -254,7 +264,7 @@ Ready to release as **v0.4.0**.
 Tracked as GitHub Issues:
 - ~~#1 Confirm the SD card mounts quickly with the 1-bit-only build~~ (done)
 - #2 Investigate why 4-bit SD transfers fail on the Bluemchen
-- #3 Add a LICENSE (note the DaisySP-LGPL reverb)
+- ~~#3 Add a LICENSE~~ (done: MIT)
 - ~~#4 Effect selector + second effect (delay)~~ (done, v0.4.0)
 - #5 Flash headroom: plan the move to the Daisy bootloader
 - #6 Delay: tap tempo and/or MIDI clock sync

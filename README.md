@@ -179,6 +179,28 @@ routing in `MakeDefaults()`. The EFFECT page, parameter pages, knob/CV routing, 
 and flash storage all follow from the parameter table (up to 8 parameters, up to 4 effects
 before `kMaxEffects` must grow, which is a settings layout change).
 
+## License
+
+BluemchenFX is open source under the **MIT License**. See [LICENSE](LICENSE).
+
+The firmware builds on these libraries, included as git submodules under `lib/`, each under its own license:
+
+| Component | Used for | License |
+|---|---|---|
+| [libDaisy](https://github.com/electro-smith/libDaisy) | Daisy Seed hardware support (bundles ST's HAL/CMSIS and FatFs under their own permissive licenses) | MIT |
+| [DaisySP](https://github.com/electro-smith/DaisySP) | DSP building blocks (delay line, filters, soft clipping) | MIT |
+| [DaisySP-LGPL](https://github.com/electro-smith/DaisySP-LGPL) | `ReverbSc`, the reverb engine | **LGPL-2.1** |
+| [kxmx_bluemchen](https://github.com/recursinging/kxmx_bluemchen) | Hardware pin map and init sequence that `src/hw/bluemchen.*` is based on | MIT (© 2020 recursinging) |
+
+**About the LGPL part:** the reverb comes from DaisySP-LGPL and is statically linked into the
+firmware, so the `.bin` files in `prebuilt/` and on the Releases page contain LGPL-2.1 code. That's
+compatible with this project's MIT license. The LGPL's main requirement for distributed binaries
+is that people can rebuild them with a modified version of the library. This repository already
+provides that: the complete source, the pinned library versions and the build scripts. If you
+distribute your own builds, keep doing the same: ship or link the source and the build steps.
+If you need a binary with no LGPL code, remove the reverb (`src/fx/reverb.*` and
+`USE_DAISYSP_LGPL` in the Makefile).
+
 ## Notes
 
 - **Flash usage is ~92 % of the 128 KB internal flash** (two effects).
@@ -190,8 +212,6 @@ before `kMaxEffects` must grow, which is a settings layout change).
   (`APP_TYPE = BOOT_SRAM` in the Makefile, `make program-boot`).
   If you use the bootloader, settings are stored at the very end of QSPI (`kFlashOffset` in
   `main.cpp`) which stays clear of the bootloader's program area.
-- ReverbSc is part of **DaisySP-LGPL** (enabled with `USE_DAISYSP_LGPL = 1`), so the firmware
-  binary falls under the LGPL's terms if you distribute it. The rest of this code is yours to license.
 - The decay display is an RT60 estimate from ReverbSc's mean loop delay; a host-side check measured
   roughly 0.53 s / 1.8 s / 6.7 s for settings of 0.5 s / 2 s / 8 s (Hi Cut damping shortens long tails a bit).
 - Settings saved by v0.3.0 (single-effect layout) are converted automatically on first boot
