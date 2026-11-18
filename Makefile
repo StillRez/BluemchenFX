@@ -6,6 +6,7 @@ CPP_SOURCES = \
 	src/hw/bluemchen.cpp \
 	src/ui/ui.cpp \
 	src/fx/reverb.cpp \
+	src/fx/delay.cpp \
 	src/app/preset_text.cpp \
 	src/app/preset_store.cpp
 

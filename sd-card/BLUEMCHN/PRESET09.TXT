@@ -1,0 +1,24 @@
+# BluemchenFX preset
+# Edit with any text editor. '#' starts a comment.
+# Lines you delete keep the module's current value.
+
+name   = Tape Wash
+effect = DELAY
+
+# input: stereo | mono (mono = left input feeds both channels)
+input  = mono
+
+# parameters, in real units (k = x1000, e.g. 8.5k)
+time   = 1.20       # 0.01 .. 2.00 s
+feedbk = 85         # 0 .. 95 %
+mix    = 55         # 0 .. 100 %
+ping   = 60         # 0 .. 100 %
+lo_cut = 300        # 20 .. 1000 Hz
+hi_cut = 1800       # 500 .. 18000 Hz
+
+# routing: none | time | feedbk | mix | ping | lo_cut | hi_cut
+# knobs set the value directly, CV adds +-5V = +-full range
+knob1  = time
+knob2  = feedbk
+cv1    = time
+cv2    = feedbk

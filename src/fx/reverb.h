@@ -28,6 +28,7 @@ class Reverb : public Effect
 
     const char *Name() const override { return "REVERB"; }
     void        Init(float sample_rate) override;
+    void        Reset() override;
 
     size_t           NumParams() const override { return NUM_PARAMS; }
     const ParamSpec &Spec(size_t idx) const override { return kSpecs[idx]; }

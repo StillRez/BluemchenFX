@@ -135,11 +135,12 @@ struct Writer
 };
 
 // ----------------------------------------------------------- serialize
-size_t SerializePreset(const fx::Effect &effect,
-                       const Settings   &settings,
-                       const char       *name,
-                       char             *out,
-                       size_t            capacity)
+size_t SerializePreset(const fx::Effect  &effect,
+                       const EffectState &state,
+                       uint8_t            input_mode,
+                       const char        *name,
+                       char              *out,
+                       size_t             capacity)
 {
     Writer w{out, capacity, 0, false};
     char   key[24], val[16], cmt[48], lo[16], hi[16];
@@ -152,14 +153,14 @@ size_t SerializePreset(const fx::Effect &effect,
     w.KeyValue("effect", effect.Name());
     w.Line();
     w.Line("# input: stereo | mono (mono = left input feeds both channels)");
-    w.KeyValue("input", settings.input_mode == INPUT_MONO ? "mono" : "stereo");
+    w.KeyValue("input", input_mode == INPUT_MONO ? "mono" : "stereo");
     w.Line();
     w.Line("# parameters, in real units (k = x1000, e.g. 8.5k)");
     for(size_t i = 0; i < effect.NumParams(); i++)
     {
         const fx::ParamSpec &s = effect.Spec(i);
         MakeKey(s.name, key, sizeof(key));
-        FormatReal(s.unit, s.ToReal(settings.norm[i]), val, sizeof(val));
+        FormatReal(s.unit, s.ToReal(state.norm[i]), val, sizeof(val));
         FormatReal(s.unit, s.min, lo, sizeof(lo));
         FormatReal(s.unit, s.max, hi, sizeof(hi));
         snprintf(cmt, sizeof(cmt), "%s .. %s %s", lo, hi, UnitSuffix(s.unit));
@@ -182,7 +183,7 @@ size_t SerializePreset(const fx::Effect &effect,
     w.Line("# knobs set the value directly, CV adds +-5V = +-full range");
     for(int s = 0; s < SRC_LAST; s++)
     {
-        int8_t r = settings.route[s];
+        int8_t r = state.route[s];
         if(r == kRouteNone)
             strcpy(key, "none");
         else
@@ -208,7 +209,8 @@ static int FindParam(const fx::Effect &effect, const char *key)
 
 static bool ApplyLine(const fx::Effect &effect,
                       char             *line,
-                      Settings         &s,
+                      EffectState      &s,
+                      uint8_t          &input_mode,
                       ParseResult      &res)
 {
     // strip comment
@@ -242,13 +244,17 @@ static bool ApplyLine(const fx::Effect &effect,
         return true;
     }
     if(strcmp(key, "effect") == 0)
-        return true; // informational
+    {
+        strncpy(res.effect, val, kEffectNameLen - 1);
+        res.effect[kEffectNameLen - 1] = 0;
+        return true;
+    }
     if(strcmp(key, "input") == 0)
     {
         if(strcmp(lval, "mono") == 0)
-            s.input_mode = INPUT_MONO;
+            input_mode = INPUT_MONO;
         else if(strcmp(lval, "stereo") == 0)
-            s.input_mode = INPUT_STEREO;
+            input_mode = INPUT_STEREO;
         else
             return false;
         res.applied++;
@@ -288,12 +294,14 @@ static bool ApplyLine(const fx::Effect &effect,
 ParseResult ParsePreset(const fx::Effect &effect,
                         const char       *text,
                         size_t            len,
-                        Settings         &settings)
+                        EffectState      &state,
+                        uint8_t          &input_mode)
 {
     ParseResult res;
-    res.applied = 0;
-    res.errors  = 0;
-    res.name[0] = 0;
+    res.applied   = 0;
+    res.errors    = 0;
+    res.name[0]   = 0;
+    res.effect[0] = 0;
 
     char   line[96];
     size_t i = 0;
@@ -309,10 +317,36 @@ ParseResult ParsePreset(const fx::Effect &effect,
         while(i < len && (text[i] == '\n' || text[i] == '\r'))
             i++;
         line[n] = 0;
-        if(!ApplyLine(effect, line, settings, res))
+        if(!ApplyLine(effect, line, state, input_mode, res))
             res.errors++;
     }
     return res;
+}
+
+int FindPresetEffect(const fx::Effect *const *effects,
+                     size_t                   num_effects,
+                     const char              *text,
+                     size_t                   len)
+{
+    if(num_effects == 0)
+        return kPresetBadEffect;
+    // Parse into scratch state just to pick up the "effect" value
+    EffectState scratch;
+    uint8_t     scratch_input = 0;
+    std::memset(&scratch, 0, sizeof(scratch));
+    ParseResult res = ParsePreset(*effects[0], text, len, scratch, scratch_input);
+    if(!res.effect[0])
+        return kPresetNoEffect;
+
+    char want[kEffectNameLen], have[kEffectNameLen];
+    MakeKey(res.effect, want, sizeof(want));
+    for(size_t i = 0; i < num_effects; i++)
+    {
+        MakeKey(effects[i]->Name(), have, sizeof(have));
+        if(strcmp(want, have) == 0)
+            return (int)i;
+    }
+    return kPresetBadEffect;
 }
 
 } // namespace app

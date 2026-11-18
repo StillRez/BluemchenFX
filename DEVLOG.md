@@ -179,6 +179,50 @@ DAT1–DAT3 routing or pull-ups on the board are the first suspect.
 - Git for Windows had checked text files out as CRLF, which can break `setup.sh`. Added
   `.gitattributes` to keep `*.sh` / `Makefile` / workflows LF, and the example presets byte-exact CRLF.
 
+## 2026-11-18 — Delay effect + effect selector (#4)
+
+**Delay (`src/fx/delay.*`)**
+- Stereo, 10 ms–2 s. Two `DelayLine<float, 96256>` in SDRAM (~770 KB).
+- Params: TIME (exp), FEEDBK 0–95 %, MIX (equal power), PING 0–100 %, LO CUT 20 Hz–1 kHz,
+  HI CUT 500 Hz–18 kHz.
+- Filters sit in the feedback loop and on the wet output, so each repeat gets thinner/darker.
+- PING crossfeeds the feedback and moves the input into the left line. At 100 %, echoes
+  alternate L/R even from a mono source.
+- TIME glides per sample (~50 ms one-pole), so it bends pitch like tape instead of clicking.
+- Writes are soft-clipped (`2·SoftClip(x/2)`).
+- **Bug caught in host testing:** with `daisysp::Svf` as the loop filters, 95 % feedback plus a
+  full-scale noise burst diverged to ±1e33 and then NaN. Svf has a built-in cubic "drive" term
+  that is unstable at the levels a saturating loop reaches. Switching to `daisysp::OnePole`
+  (zero-delay, unconditionally stable) fixed it: max output 1.93 over 20 s, no NaN.
+- Host tests: first echo at exactly 250.0 ms for a 250 ms setting, echo decay follows
+  feedback, ping-pong alternates L→R→L→R, and a 0.1 s→1.0 s time sweep stays bounded.
+
+**Effect selector**
+- EFFECT page after HOME: click, turn, click to switch. Switching sets a `switching` flag (the audio
+  callback passes dry), waits 2 ms, resets the incoming effect's buffers and smoothing, swaps
+  settings, and clears the flag. That avoids clicks and stale echoes/tails.
+- **Settings v2** (`0xB10E0002`, 168 B): active effect index plus an `EffectState` (8 norms +
+  4 routes) per effect slot, room for 4 effects. Each effect keeps its own knob/CV routing:
+  reverb K1/K2/CV1/CV2 = Decay/Mix/Decay/Hi Cut, delay = Time/Mix/Time/Feedback.
+- **Migration:** if the flash sector holds v0.3.0's v1 struct (state word FACTORY/USER +
+  version `0xB10E0001`), it's converted on first boot. The reverb keeps its settings and input
+  mode, and the delay gets its defaults. The v1 struct was checked against v0.3.0's
+  `settings.h` for size and every field offset, on the host and on the ARM ABI with `-fshort-enums`.
+- Presets: `effect = …` now selects the effect (case-insensitive on `Name()`). Loading another
+  effect's preset switches to it. A file without an effect line applies to the active effect;
+  an unknown effect shows `BAD FX`. SD slot pages show which effect a used slot holds.
+  The existing reverb presets (01–05) parse unchanged. Added delay examples 06–09
+  (Slapback, Ping Pong, Dub Echo, Tape Wash).
+- MIDI CC 20+n maps to parameter n of the active effect. Program Change can switch effect via the
+  preset.
+- HOME bars: labels shrink to 2 characters when there are more than 4 params (delay has 6).
+
+**Flash:** 119,972 B = 91.5 % (was 85.6 %). The delay plus the selector cost ~7.7 KB.
+
+*Status: compiled (no warnings), DSP and presets host-tested. Not yet run on hardware.
+Pending on the module: delay sound/controls, effect switching, settings migration from v0.3.0,
+delay presets, and the HOME page layout with 6 params.*
+
 ---
 
 ## Open items
@@ -187,5 +231,5 @@ Tracked as GitHub Issues:
 - ~~#1 Confirm the SD card mounts quickly with the 1-bit-only build~~ (done)
 - #2 Investigate why 4-bit SD transfers fail on the Bluemchen
 - #3 Add a LICENSE (note the DaisySP-LGPL reverb)
-- #4 Effect selector + second effect (e.g. delay)
+- #4 Effect selector + second effect (delay): implemented, awaiting hardware test
 - #5 Flash headroom: plan the move to the Daisy bootloader

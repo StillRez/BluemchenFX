@@ -29,22 +29,25 @@ class PresetStore
         NO_FILE,
         IO_ERROR,
         PARSE_ERROR, // file read but contained no usable settings
+        BAD_EFFECT,  // "effect = ..." names an effect this firmware lacks
     };
 
-    /** No card access here; only sets up the driver. */
-    void Init();
+    /** No card access here; only sets up the driver. `effects` is the
+     *  firmware's effect list (index = Settings::effect). */
+    void Init(const fx::Effect *const *effects, size_t num_effects);
 
     bool Mounted() const { return mounted_; }
 
-    /** Writes `settings` to slot (1..99). Keeps the slot's existing name
-     *  if it already has one, otherwise names it "PRESET nn". */
-    Status Save(int slot, const fx::Effect &effect, const Settings &settings);
+    /** Writes the active effect's settings to slot (1..99). Keeps the
+     *  slot's existing name if it has one, otherwise "PRESET nn". */
+    Status Save(int slot, const Settings &settings);
 
-    /** Applies the slot's file on top of `settings` (only on success). */
-    Status Load(int slot, const fx::Effect &effect, Settings &settings);
+    /** Applies the slot's file on top of `settings` (only on success).
+     *  May change settings.effect if the preset is for another effect. */
+    Status Load(int slot, Settings &settings);
 
-    /** Reads only the slot's name (empty if it has none). */
-    Status Peek(int slot, const fx::Effect &effect, char *name, size_t len);
+    /** Reads only the slot's name and effect name (empty if missing). */
+    Status Peek(int slot, char *name, size_t len, char *effect, size_t effect_len);
 
     static const char *StatusText(Status s);
 
@@ -60,6 +63,9 @@ class PresetStore
     Status ReadSlot(int slot, size_t &len);
     void   RecordError(int fresult, int bus_cfg);
     Status MountFailureStatus() const;
+
+    const fx::Effect *const *effects_     = nullptr;
+    size_t                   num_effects_ = 0;
 
     daisy::SdmmcHandler   sd_;
     daisy::FatFSInterface fsi_;

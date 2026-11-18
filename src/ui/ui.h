@@ -4,7 +4,8 @@
  *
  * Pages (turn the encoder to move between them):
  *   HOME          overview: bar for every parameter + I/O meters
- *   <param> x N   one page per effect parameter
+ *   EFFECT        choose the effect (REVERB, DELAY, ...)
+ *   <param> x N   one page per parameter of the active effect
  *   K1 / K2       route knob 1 / knob 2 to a parameter (absolute control)
  *   CV1 / CV2     route CV 1 / CV 2 to a parameter (bipolar offset)
  *   INPUT         STEREO, or MONO (left input copied to right)
@@ -34,8 +35,11 @@ enum class SdAction
 class Ui
 {
   public:
+    /** `effects` is the firmware's effect list; the active one and its
+     *  parameters/routing are always read via settings->effect. */
     void Init(bluemchen::Hardware::Display *display,
-              fx::Effect                   *effect,
+              const fx::Effect *const      *effects,
+              size_t                        num_effects,
               app::Settings                *settings);
 
     // --- input events (call from main loop) ---------------------------
@@ -55,11 +59,14 @@ class Ui
     int TakeEditedParam();
     /** True once after a routing change (so knob takeover can reset). */
     bool TakeRouteChanged();
+    /** Effect index the user confirmed on the EFFECT page, or -1. The
+     *  caller performs the switch (it needs to silence/reset audio). */
+    int TakeEffectRequest();
     /** Pending SD card request, if any (latest request wins). */
     bool TakeSdRequest(SdAction &action, int &slot);
     /** Result of a PEEK for the slot display. `used` = file exists.
-     *  `detail` is shown on the bottom line when the slot isn't used
-     *  (e.g. an SD error code). */
+     *  Used slot: `text` = preset name, `detail` = its effect name.
+     *  Otherwise: `text` = status, `detail` = error code (bottom line). */
     void SetSdSlotInfo(int slot, bool used, const char *text, const char *detail);
     /** Immediately draw a full-screen message (for blocking operations). */
     void ShowBusy(const char *msg);
@@ -73,6 +80,7 @@ class Ui
     enum PageKind
     {
         PAGE_HOME,
+        PAGE_EFFECT,
         PAGE_PARAM,
         PAGE_ROUTE,
         PAGE_INPUT,
@@ -92,6 +100,10 @@ class Ui
     void   DrawParam(size_t idx, const float *eff, bool editing);
     void   DrawRoute(size_t src, bool editing);
     void   DrawInput(bool editing);
+    void   DrawEffect(bool editing);
+    const fx::Effect       &Fx() const { return *effects_[settings_->effect]; }
+    app::EffectState       &St() { return settings_->Active(); }
+    const app::EffectState &St() const { return settings_->Active(); }
     void   DrawSd(bool load, bool editing);
     bool   IsSdPage(int p) const;
     void   RequestSd(SdAction a);
@@ -102,8 +114,12 @@ class Ui
     const char *SourceTag(size_t param) const;
 
     bluemchen::Hardware::Display *disp_     = nullptr;
-    fx::Effect                   *fx_       = nullptr;
-    app::Settings                *settings_ = nullptr;
+    const fx::Effect *const      *effects_     = nullptr;
+    size_t                        num_effects_ = 0;
+    app::Settings                *settings_    = nullptr;
+
+    int pending_effect_ = 0;  // choice while editing the EFFECT page
+    int effect_request_ = -1; // confirmed choice, for the main loop
 
     int      page_      = 0;
     bool     editing_   = false;

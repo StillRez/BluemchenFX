@@ -32,15 +32,18 @@ static inline float DecayToFeedback(float rt60)
 void Reverb::Init(float sample_rate)
 {
     sr_ = sample_rate;
-    g_reverbsc.Init(sr_);
+    for(size_t i = 0; i < NUM_PARAMS; i++)
+        target_[i] = kSpecs[i].ToReal(kSpecs[i].def);
+    Reset();
+}
 
+void Reverb::Reset()
+{
+    g_reverbsc.Init(sr_); // clears the tank (~400 KB)
     hp_l_.Init(sr_);
     hp_r_.Init(sr_);
     hp_l_.SetRes(0.f);
     hp_r_.SetRes(0.f);
-
-    for(size_t i = 0; i < NUM_PARAMS; i++)
-        target_[i] = kSpecs[i].ToReal(kSpecs[i].def);
 
     fb_  = DecayToFeedback(target_[DECAY]);
     mix_ = target_[MIX] * 0.01f;

@@ -4,8 +4,11 @@
 
 namespace app
 {
-static constexpr size_t   kMaxParams       = 8;
-static constexpr uint32_t kSettingsVersion = 0xB10E0001; // bump on layout change
+static constexpr size_t kMaxParams  = 8; // per effect
+static constexpr size_t kMaxEffects = 4; // room to grow without a layout change
+
+/** v2: per-effect parameters + routing, active effect index. */
+static constexpr uint32_t kSettingsVersion = 0xB10E0002; // bump on layout change
 
 /** Modulation sources that can be routed to a parameter. */
 enum Source : uint8_t
@@ -30,19 +33,42 @@ enum InputMode : uint8_t
     INPUT_MODE_LAST
 };
 
+/** Everything one effect remembers: parameter values and routing. */
+struct EffectState
+{
+    float   norm[kMaxParams];  // parameter base values, 0..1
+    int8_t  route[SRC_LAST];   // destination param index or kRouteNone
+    uint8_t pad[4];
+};
+
 /** Everything that is persisted to QSPI flash. Plain-old-data only. */
 struct Settings
 {
-    uint32_t version;
-    float    norm[kMaxParams];  // parameter base values, 0..1
-    int8_t   route[SRC_LAST];   // destination param index or kRouteNone
-    uint8_t  input_mode;        // InputMode (0 = stereo, so older saves load as stereo)
-    uint8_t  pad[3];
+    uint32_t    version;
+    uint8_t     effect;     // index of the active effect
+    uint8_t     input_mode; // InputMode
+    uint8_t     pad[2];
+    EffectState fx[kMaxEffects];
+
+    EffectState       &Active() { return fx[effect]; }
+    const EffectState &Active() const { return fx[effect]; }
 
     bool operator!=(const Settings &o) const
     {
         return std::memcmp(this, &o, sizeof(Settings)) != 0;
     }
+};
+
+/** v1 layout (firmware up to v0.3.0), kept only to migrate saved settings.
+ *  v1 had a single effect (the reverb). */
+static constexpr uint32_t kSettingsVersionV1 = 0xB10E0001;
+struct SettingsV1
+{
+    uint32_t version;
+    float    norm[kMaxParams];
+    int8_t   route[SRC_LAST];
+    uint8_t  input_mode;
+    uint8_t  pad[3];
 };
 
 } // namespace app

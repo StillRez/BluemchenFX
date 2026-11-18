@@ -22,12 +22,14 @@ static inline float Clamp01(float x)
 }
 
 void Ui::Init(bluemchen::Hardware::Display *display,
-              fx::Effect                   *effect,
+              const fx::Effect *const      *effects,
+              size_t                        num_effects,
               app::Settings                *settings)
 {
-    disp_     = display;
-    fx_       = effect;
-    settings_ = settings;
+    disp_        = display;
+    effects_     = effects;
+    num_effects_ = num_effects;
+    settings_    = settings;
     page_     = 0;
     editing_  = false;
 }
@@ -35,15 +37,18 @@ void Ui::Init(bluemchen::Hardware::Display *display,
 // ---------------------------------------------------------------- pages
 int Ui::NumPages() const
 {
-    // HOME + params + routes + INPUT + LOAD SD + SAVE SD + SAVE
-    return 1 + (int)fx_->NumParams() + app::SRC_LAST + 4;
+    // HOME + EFFECT + params + routes + INPUT + LOAD SD + SAVE SD + SAVE
+    return 2 + (int)Fx().NumParams() + app::SRC_LAST + 4;
 }
 
 Ui::Page Ui::PageAt(int p) const
 {
-    const int n = (int)fx_->NumParams();
+    const int n = (int)Fx().NumParams();
     if(p == 0)
         return {PAGE_HOME, 0};
+    if(p == 1)
+        return {PAGE_EFFECT, 0};
+    p -= 1; // params start at page 2
     if(p <= n)
         return {PAGE_PARAM, p - 1};
     if(p <= n + app::SRC_LAST)
@@ -77,6 +82,8 @@ void Ui::OnTurn(int32_t inc, uint32_t now_ms)
 
     // Turning the encoder cancels a peek and returns to the current page.
     peek_until_ = 0;
+    if(page_ >= NumPages()) // effect changed underneath us
+        page_ = NumPages() - 1;
 
     if(!editing_)
     {
@@ -98,21 +105,30 @@ void Ui::OnTurn(int32_t inc, uint32_t now_ms)
         float    step = dt < 25 ? kStepFast : (dt < 80 ? kStepNormal : kStepFine);
         last_turn_    = now_ms;
 
-        float &v = settings_->norm[pg.index];
+        float &v = St().norm[pg.index];
         v        = Clamp01(v + step * (float)inc);
         edited_param_ = pg.index;
     }
     else if(pg.kind == PAGE_ROUTE)
     {
         // cycle: none, param 0 .. param N-1
-        int r = settings_->route[pg.index] + (inc > 0 ? 1 : -1);
-        int n = (int)fx_->NumParams();
+        int r = St().route[pg.index] + (inc > 0 ? 1 : -1);
+        int n = (int)Fx().NumParams();
         if(r < app::kRouteNone)
             r = n - 1;
         if(r >= n)
             r = app::kRouteNone;
-        settings_->route[pg.index] = (int8_t)r;
+        St().route[pg.index] = (int8_t)r;
         route_changed_             = true;
+    }
+    else if(pg.kind == PAGE_EFFECT)
+    {
+        int e = pending_effect_ + (inc > 0 ? 1 : -1);
+        if(e < 0)
+            e = (int)num_effects_ - 1;
+        if(e >= (int)num_effects_)
+            e = 0;
+        pending_effect_ = e;
     }
     else if(pg.kind == PAGE_INPUT)
     {
@@ -140,7 +156,15 @@ void Ui::OnClick(uint32_t now_ms)
     Page pg     = PageAt(page_);
     switch(pg.kind)
     {
-        case PAGE_HOME: page_ = 1; break; // jump to first parameter
+        case PAGE_HOME: page_ = 2; break; // jump to first parameter
+        case PAGE_EFFECT:
+            // 1st click: choose. 2nd click: switch (if changed).
+            if(!editing_)
+                pending_effect_ = settings_->effect;
+            else if(pending_effect_ != settings_->effect)
+                effect_request_ = pending_effect_;
+            editing_ = !editing_;
+            break;
         case PAGE_SAVE:
             save_request_ = true;
             Flash("SAVED", now_ms);
@@ -227,6 +251,13 @@ void Ui::ShowBusy(const char *msg)
     disp_->Update();
 }
 
+int Ui::TakeEffectRequest()
+{
+    int r           = effect_request_;
+    effect_request_ = -1;
+    return r;
+}
+
 bool Ui::TakeRouteChanged()
 {
     bool r         = route_changed_;
@@ -250,7 +281,11 @@ void Ui::Draw(const float *eff, float meter_in, float meter_out, uint32_t now_ms
         return;
     }
 
-    if(peek_param_ >= 0 && now_ms < peek_until_)
+    if(page_ >= NumPages()) // effect changed underneath us
+        page_ = NumPages() - 1;
+
+    if(peek_param_ >= 0 && peek_param_ < (int)Fx().NumParams()
+       && now_ms < peek_until_)
     {
         DrawParam((size_t)peek_param_, eff, false);
     }
@@ -260,6 +295,7 @@ void Ui::Draw(const float *eff, float meter_in, float meter_out, uint32_t now_ms
         switch(pg.kind)
         {
             case PAGE_HOME: DrawHome(eff); break;
+            case PAGE_EFFECT: DrawEffect(editing_); break;
             case PAGE_PARAM: DrawParam(pg.index, eff, editing_); break;
             case PAGE_ROUTE: DrawRoute(pg.index, editing_); break;
             case PAGE_INPUT: DrawInput(editing_); break;
@@ -289,11 +325,11 @@ void Ui::DrawHeader(const char *title, bool inverted, const char *tag)
 
 void Ui::DrawHome(const float *eff)
 {
-    DrawHeader(fx_->Name(),
+    DrawHeader(Fx().Name(),
                false,
                settings_->input_mode == app::INPUT_MONO ? "MONO" : nullptr);
 
-    const int n     = (int)fx_->NumParams();
+    const int n     = (int)Fx().NumParams();
     const int col_w = kContentW / n;
     const int top = 10, bottom = 24; // bar area
     for(int i = 0; i < n; i++)
@@ -305,10 +341,12 @@ void Ui::DrawHome(const float *eff)
         if(h > 0)
             disp_->DrawRect(x0, bottom - h, x1, bottom, true, true);
 
-        // 3-char label: "DECAY" -> "DEC", "LO CUT" -> "LO"
-        char label[4] = {0};
-        const char *name = fx_->Spec(i).name;
-        for(int c = 0; c < 3 && name[c] && name[c] != ' '; c++)
+        // Short label that fits the column (4 px per char): 3 chars for up
+        // to 4 params ("DECAY" -> "DEC", "LO CUT" -> "LO"), 2 for more.
+        const int   max_chars = col_w / 4 < 3 ? col_w / 4 : 3;
+        char        label[4]  = {0};
+        const char *name      = Fx().Spec(i).name;
+        for(int c = 0; c < max_chars && name[c] && name[c] != ' '; c++)
             label[c] = name[c];
         disp_->SetCursor(x0, 26);
         disp_->WriteString(label, Font_4x6, true);
@@ -317,7 +355,7 @@ void Ui::DrawHome(const float *eff)
 
 void Ui::DrawParam(size_t idx, const float *eff, bool editing)
 {
-    DrawHeader(fx_->Spec(idx).name, editing, SourceTag(idx));
+    DrawHeader(Fx().Spec(idx).name, editing, SourceTag(idx));
 
     // Value: big font if it fits, else medium
     char buf[12];
@@ -334,21 +372,35 @@ void Ui::DrawParam(size_t idx, const float *eff, bool editing)
     int fill = (int)(eff[idx] * bx1 + 0.5f);
     if(fill > 0)
         disp_->DrawRect(0, 28, fill, 31, true, true);
-    int tick = (int)(settings_->norm[idx] * bx1 + 0.5f);
+    int tick = (int)(St().norm[idx] * bx1 + 0.5f);
     disp_->DrawLine(tick, 26, tick, 27, true);
 }
 
 void Ui::DrawRoute(size_t src, bool editing)
 {
     DrawHeader(kSourceTitle[src], editing, src < app::SRC_CV_1 ? "SET" : "MOD");
-    int8_t      r    = settings_->route[src];
-    const char *dest = r == app::kRouteNone ? "--" : fx_->Spec(r).name;
+    int8_t      r    = St().route[src];
+    const char *dest = r == app::kRouteNone ? "--" : Fx().Spec(r).name;
     disp_->SetCursor(0, 10);
     disp_->WriteString(">", Font_7x10, true);
     disp_->SetCursor(10, 10);
     disp_->WriteString(dest, Font_7x10, true);
     disp_->SetCursor(0, 25);
     disp_->WriteString(editing ? "turn: dest" : "push: edit", Font_4x6, true);
+}
+
+void Ui::DrawEffect(bool editing)
+{
+    DrawHeader("EFFECT", editing, nullptr);
+    const int   shown = editing ? pending_effect_ : settings_->effect;
+    const char *name  = effects_[shown]->Name();
+    disp_->SetCursor(0, 10);
+    disp_->WriteString(name, Font_7x10, true);
+    const char *hint = !editing                               ? "push: change"
+                       : pending_effect_ != settings_->effect ? "push: switch"
+                                                              : "push: keep";
+    disp_->SetCursor(0, 25);
+    disp_->WriteString(hint, Font_4x6, true);
 }
 
 void Ui::DrawInput(bool editing)
@@ -372,7 +424,11 @@ void Ui::DrawSd(bool load, bool editing)
 
     // status next to the slot number, name on the bottom line
     const bool  fresh  = sd_info_slot_ == sd_slot_;
-    const char *status = !fresh ? "..." : (sd_used_ ? "used" : sd_text_);
+    // used slot: show which effect it's for (falls back to "used")
+    const char *status = !fresh     ? "..."
+                         : !sd_used_ ? sd_text_
+                         : sd_detail_[0] ? sd_detail_
+                                         : "used";
     disp_->SetCursor(26, 10);
     disp_->WriteString(status, Font_4x6, true);
     disp_->SetCursor(26, 18);
@@ -419,7 +475,7 @@ const char *Ui::SourceTag(size_t param) const
     tag[0] = 0;
     for(int s = 0; s < app::SRC_LAST; s++)
     {
-        if(settings_->route[s] == (int8_t)param && strlen(tag) < 6)
+        if(St().route[s] == (int8_t)param && strlen(tag) < 6)
             strcat(tag, kSourceTag[s]);
     }
     return tag;
@@ -427,7 +483,7 @@ const char *Ui::SourceTag(size_t param) const
 
 void Ui::FormatValue(size_t idx, float norm, char *buf, size_t len) const
 {
-    const fx::ParamSpec &s = fx_->Spec(idx);
+    const fx::ParamSpec &s = Fx().Spec(idx);
     float                v = s.ToReal(norm);
     // integer formatting only (newlib-nano printf has no %f by default)
     switch(s.unit)

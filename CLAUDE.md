@@ -36,7 +36,8 @@ make            # -> build/BluemchenFX.bin
   the larger of the two. Release binaries come from CI.
 - Line endings: `.gitattributes` keeps `*.sh` and `Makefile` LF everywhere. Jeff's clone uses
   Git for Windows' CRLF conversion for other text files.
-- **Flash budget: 128 KB internal, currently ~86 % used.** The project and libDaisy build with
+- **Flash budget: 128 KB internal, ~92 % used with two effects** (119,972 B with GCC 13.3;
+  expect a bit more with Jeff's GCC 10.2). A third effect probably needs the bootloader (#5). The project and libDaisy build with
   `-Os` to fit. `src/fx/reverb.cpp` opts back into `-O2` with `#pragma GCC optimize`; do the
   same for new DSP files. If the link fails with "FLASH overflowed", libDaisy was probably built
   without `OPT=-Os`. The next step for more room is the Daisy bootloader (`APP_TYPE = BOOT_SRAM`).
@@ -60,8 +61,9 @@ src/main.cpp            audio callback, encoder events, knob takeover, MIDI, QSP
 src/hw/bluemchen.*      hardware layer
 src/fx/effect.h         Effect interface + ParamSpec (name, range, curve, unit, ToReal/ToNorm)
 src/fx/reverb.*         ReverbSc (SDRAM) + SVF lo cut + equal-power mix; decay = RT60 seconds
+src/fx/delay.*          stereo delay <= 2 s (SDRAM DelayLines), OnePole loop filters, ping-pong
 src/ui/ui.*             page/menu system, 64x32 drawing
-src/app/settings.h      persisted POD struct (QSPI, last 4 KB sector)
+src/app/settings.h      persisted POD struct v2: active effect + per-effect EffectState (QSPI)
 src/app/preset_text.*   preset text format (hardware-independent, host-testable)
 src/app/preset_store.*  SD mount + slot files (FatFS)
 sd-card/BLUEMCHN/       example presets
@@ -69,11 +71,20 @@ sd-card/BLUEMCHN/       example presets
 
 ## Conventions and gotchas
 
-- **New effects** implement `fx::Effect` and publish a `ParamSpec` table. UI pages, knob/CV
-  routing, MIDI CC (20+n) and preset keys are generated from it. Max 8 params. Header names
-  can be up to 7 chars.
-- **`Settings` layout is persisted.** Adding fields: use the `pad` bytes, where zero must mean
-  "old behaviour", or bump `kSettingsVersion`. The latter resets users' saved settings.
+- **New effects** implement `fx::Effect` (incl. `Reset()`) and publish a `ParamSpec` table. UI
+  pages, knob/CV routing, MIDI CC (20+n) and preset keys are generated from it. Max 8 params.
+  Header names can be up to 7 chars. Register by **appending** to `EffectId` / `effects[]` in
+  `main.cpp`: the index is persisted, so never reorder. Presets refer to effects by `Name()`.
+  Up to `kMaxEffects` = 4 without a layout change.
+- **Effect switching** goes through `ApplySettings()` in `main.cpp`: it sets `switching` (audio
+  callback passes dry), waits 2 ms, pushes params, calls `Reset()` on the incoming effect,
+  swaps settings, then clears `switching`. Never change `settings->effect` any other way.
+- **`Settings` layout is persisted** (v2 = `0xB10E0002`, 168 bytes). Adding fields: use `pad`
+  bytes where zero means "old behaviour", or bump the version **and** add a migration like
+  `ReadLegacySettings()` (v1 -> v2), so users keep their settings.
+- **Don't use `daisysp::Svf` inside feedback loops.** Its built-in cubic drive term
+  (`band -= 0.5*band^3`) goes unstable at the levels a saturating loop reaches (host test blew
+  up at 95 % feedback). Use `daisysp::OnePole` there. Svf is fine on bounded inputs (reverb send).
 - **No float `printf`/`snprintf("%f")`** (newlib-nano). Format with integers, as `FormatValue`
   and `FormatReal` do.
 - **Audio ISR vs main loop:** the audio callback is the only writer of encoder counters and

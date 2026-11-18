@@ -58,7 +58,13 @@ class Effect
   public:
     virtual ~Effect() {}
     virtual const char *Name() const = 0;
-    virtual void        Init(float sample_rate) = 0;
+    /** One-time setup (allocates/zeroes buffers). Called at boot for
+     *  every effect, before audio starts. */
+    virtual void Init(float sample_rate) = 0;
+    /** Clear all audio state (tails, delay buffers), keeping parameters.
+     *  Called from the main loop while the effect is NOT being processed
+     *  (e.g. just before switching to it), so it may take a few ms. */
+    virtual void Reset() = 0;
 
     virtual size_t           NumParams() const       = 0;
     virtual const ParamSpec &Spec(size_t idx) const = 0;
