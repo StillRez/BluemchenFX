@@ -219,9 +219,18 @@ DAT1–DAT3 routing or pull-ups on the board are the first suspect.
 
 **Flash:** 119,972 B = 91.5 % (was 85.6 %). The delay plus the selector cost ~7.7 KB.
 
-*Status: compiled (no warnings), DSP and presets host-tested. Not yet run on hardware.
-Pending on the module: delay sound/controls, effect switching, settings migration from v0.3.0,
-delay presets, and the HOME page layout with 6 params.*
+*Status: compiled (no warnings), DSP and presets host-tested.*
+
+**On hardware (later the same day):** flashed and running. **Switching between REVERB and DELAY
+works** ✅. Still to confirm: the delay's detailed behaviour (TIME glide, high FEEDBK, PING),
+per-effect values/routing surviving switches, migration of the saved v0.3.0 settings, delay
+presets 06–09, and the 6-bar HOME page.
+
+The first attempt flashed stale firmware: after `git pull`, `make program-dfu` only flashed the
+old `build/` contents (libDaisy's program targets don't rebuild). The 113,908-byte size in
+dfu-util's output gave it away. The project Makefile now makes `program-dfu` / `program` /
+`program-boot` depend on `all`. dfu-util's trailing `get_status` error / make `Error 74` is
+harmless (the device resets because of `:leave`) and is now documented.
 
 ---
 
@@ -231,6 +240,6 @@ Tracked as GitHub Issues:
 - ~~#1 Confirm the SD card mounts quickly with the 1-bit-only build~~ (done)
 - #2 Investigate why 4-bit SD transfers fail on the Bluemchen
 - #3 Add a LICENSE (note the DaisySP-LGPL reverb)
-- #4 Effect selector + second effect (delay): implemented, awaiting hardware test
+- #4 Effect selector + second effect (delay): switching confirmed on hardware; rest of checklist pending
 - #5 Flash headroom: plan the move to the Daisy bootloader
 - #6 Delay: tap tempo and/or MIDI clock sync
