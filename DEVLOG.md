@@ -345,20 +345,6 @@ Ready to release as **v0.5.0**: the first release that requires the Daisy bootlo
 
 ---
 
-## Open items
-
-Tracked as GitHub Issues:
-- ~~#1 Confirm the SD card mounts quickly with the 1-bit-only build~~ (done)
-- #2 Investigate why 4-bit SD transfers fail on the Bluemchen
-- ~~#3 Add a LICENSE~~ (done: MIT)
-- ~~#4 Effect selector + second effect (delay)~~ (done, v0.4.0)
-- ~~#5 Flash headroom: move to the Daisy bootloader~~ (done, v0.5.0)
-- #6 Delay: tap tempo and/or MIDI clock sync
-- #7 Delay sound tuning: feedback saturation
-- #8 UI tweaks: HOME page crowding and other improvements
-
----
-
 ## 2026-11-18 — Design pass: effect chaining
 
 Docs only. **No code changed, nothing compiled or verified on hardware.**
@@ -377,3 +363,17 @@ Docs only. **No code changed, nothing compiled or verified on hardware.**
 - Open questions Q1–Q5 (arena sizes, param recall, partial presets, CPU overload policy,
   bypass default) need Jeff's answers before phase 1. Phase 0 (CPU meter + host tests) doesn't
   depend on them.
+
+---
+
+## Open items
+
+Tracked as GitHub Issues:
+- ~~#1 Confirm the SD card mounts quickly with the 1-bit-only build~~ (done)
+- #2 Investigate why 4-bit SD transfers fail on the Bluemchen
+- ~~#3 Add a LICENSE~~ (done: MIT)
+- ~~#4 Effect selector + second effect (delay)~~ (done, v0.4.0)
+- ~~#5 Flash headroom: move to the Daisy bootloader~~ (done, v0.5.0)
+- #6 Delay: tap tempo and/or MIDI clock sync
+- #7 Delay sound tuning: feedback saturation
+- #8 UI tweaks: HOME page crowding and other improvements
