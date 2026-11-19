@@ -690,6 +690,24 @@ setting; chain presets (phase 3) won't change it unless we decide otherwise.
 4. *Try LIMIT at −6 dB and LIM REL at 20 ms vs 1 s to hear the range.*
 5. *CPU page: about the same as before (≈ 55 % / 66 % for D → R → R → R).*
 
+
+## 2026-11-19 — Output limiter verified on hardware ✅ (closes #10)
+
+StillRez flashed the limiter build. All checks passed:
+- Saved chain, routing and OUT came back (v3 → v4 settings migration) ✅
+- D → R → R → R with a held note: no more harsh clipping; LIMIT shows the gain reduction and
+  the `ON` tag ✅
+- Normal-level material sounds unchanged ✅
+- LIMIT / LIM REL ranges behave as expected ✅
+- CPU about the same as before ✅
+
+The capital-letter small text (from the phase 2 follow-up) is in this build too and was in use
+throughout the test.
+
+Everything since v0.5.0 is now verified on hardware: CPU meter + host tests (phase 0), chain
+engine + settings v3 (phase 1, except MIDI CC, still pending a check of the MIDI input),
+chain UI (phase 2), limiter + settings v4. Ready to release as **v0.6.0**.
+
 ---
 
 ## Open items
@@ -703,7 +721,7 @@ Tracked as GitHub Issues:
 - #6 Delay: tap tempo and/or MIDI clock sync
 - #7 Delay sound tuning: feedback saturation
 - ~~#8 UI tweaks: HOME page crowding~~ (done: phase 2 chain HOME, small text in capitals)
-- #10 Output limiter for stacked-effect peaking (built, hardware check pending)
+- ~~#10 Output limiter for stacked-effect peaking~~ (done)
 - *(no issue yet)* MIDI CC not yet re-tested since the chain engine (Phase 1). StillRez is
   checking the module's MIDI input hardware first.
 - *(no issue yet)* Chain engine overhead (~2 % CPU): add a fast path for steady slots.
