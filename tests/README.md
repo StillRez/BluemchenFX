@@ -8,8 +8,9 @@ make -C tests run ARGS=chain # only tests whose name contains "chain"
 make -C tests run ARGS=delay # only tests whose name contains "delay"
 ```
 
-They compile the firmware's hardware-independent code (`src/fx/*`, `src/app/preset_text.cpp`)
-and DaisySP / DaisySP-LGPL with the native `g++`. `stubs/` stands in for the libDaisy headers
+They compile the firmware's hardware-independent code (`src/fx/*`, `src/app/*` except the SD
+store, `src/ui/ui.cpp`) and DaisySP / DaisySP-LGPL with the native `g++`, plus libDaisy's display
+headers and fonts for the UI tests. `stubs/` stands in for the libDaisy headers
 the effects include. CI runs them on every push, and the firmware build waits for them.
 
 | Test | What it checks |
@@ -38,6 +39,15 @@ the effects include. CI runs them on every push, and the firmware build waits fo
 | `chain_swap_keeps_other_slots_playing` | a swap completes in ~20 ms while the other slots keep running |
 | `chain_effect_too_big_for_arena` | an effect that doesn't fit its arena leaves the slot empty (a wire) and is reported |
 | `chain_stress_random_changes` | 30 s of random swaps, bypass toggles and parameter jumps stay finite and bounded |
+| `ui_home_lists_the_chain` | HOME shows one row per slot (lowercase when bypassed), SETUP scrolls into view |
+| `ui_build_a_chain_from_the_panel` | fill all 4 slots (incl. the same effect twice) and empty one again, only with turns/clicks/holds |
+| `ui_replacing_an_effect_needs_confirmation` | `REPLACE?` step; turning or holding backs out |
+| `ui_long_press_saves_on_home_and_goes_back_elsewhere` | hold = save on HOME, back everywhere else |
+| `ui_edits_reach_the_open_slot` | parameter / bypass edits land in the slot that's open, nowhere else |
+| `ui_routes_reach_every_slot` | KNOB/CV pages list every parameter of every filled slot, plus NONE |
+| `ui_out_level_in_half_db_steps` | OUT page: 0.5 dB steps, exact unity back at 0 dB, −24…+6 dB |
+| `ui_peek_shows_any_slot`, `ui_survives_type_changes_underneath`, `ui_remembers_selection_and_pages` | peeks, effect changed under an open page, remembered pages and HOME selection |
+| `ui_every_screen_fits_the_display` | every page of every level, editing or not: no text past x = 59 (the meters) |
 
 **Adding an effect:** add it to `g_effects[]` at the top of `test_effects.cpp` and to the
 `tested` list in `test_chain.cpp`.

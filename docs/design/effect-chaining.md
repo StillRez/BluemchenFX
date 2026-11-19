@@ -1,6 +1,6 @@
 # Design: effect chaining
 
-Status: **approved design**, not implemented yet. Date: 2026-11-18. All open questions answered.
+Status: **approved design**, phases 0–1 done and verified on hardware, phase 2 built (hardware check pending). Date: 2026-11-18. All open questions answered.
 
 ## Decisions already made (StillRez, 2026-11-18)
 
@@ -251,6 +251,20 @@ goes back to HOME. Changing `TYPE` on a populated slot asks for a confirmation c
 
 This replaces the crowded HOME screen from #8.
 
+*As built (phase 2):*
+- Long press on a slot or SETUP page goes straight to HOME, also from edit mode (one press,
+  always the same result) instead of first leaving edit mode.
+- Opening a slot shows its **first parameter** the first time (TYPE for an empty slot), then
+  whatever page was open last in that slot. BYPASS / BYP MODE / TYPE are a few detents left.
+- TYPE lists `EMPTY` first, so a slot can be cleared from the panel. The confirmation screen is
+  `REPLACE?` with the new name, `old: <name>` and `push:ok turn:no`.
+- The slot number is a small inverted box at the left of each slot page's header (and on
+  peeks), so a knob peek shows which slot it touched.
+- OUT: −24…+6 dB in 0.5 dB steps (fast turning: 1 dB), stored as linear gain; 0 dB is exactly
+  1.0 so the audio callback can skip the multiply.
+- The CPU bar sits at x = 59 on HOME, left of the I/O meters. `ui_slot` (in settings v3)
+  remembers the HOME selection across power cycles.
+
 ## 5. Knobs, CV and MIDI
 
 - Routes target `(slot, param)`. Knob takeover (0.03 threshold) works per target, unchanged.
@@ -287,7 +301,7 @@ Each phase is one or more commits and ends with a hardware check by StillRez.
 |---|---|---|
 | 0 | CPU meter + host test harness in CI. No behaviour change. **Done, verified on hardware (2026-11-18).** | CPU % shown, reverb/delay costs recorded |
 | 1 | Arena + per-slot instances, chain engine, settings v3 + migration. The UI temporarily edits slot 1 only (plus BYPASS / BYP MODE pages). **Done, verified on hardware (2026-11-18)** except MIDI CC (not tested yet). | Old settings come back in slot 1; no clicks on bypass/swap |
-| 2 | Hierarchical UI: HOME overview, slot pages, setup menu, long press = back. | Build a 2–4 slot chain from the panel; closes #8 |
+| 2 | Hierarchical UI: HOME overview, slot pages, setup menu, long press = back. **Built 2026-11-18, host-tested; hardware check pending.** | Build a 2–4 slot chain from the panel; closes #8 |
 | 3 | Chain presets + CC map | Old and new presets load; MIDI CCs reach slots 2–4 |
 | 4 | New effects, cheapest first: filter/drive, wavefolder, bit/SR reduction, tremolo/chorus, compressor/limiter; then pitch/granular; then the looper (large pool) | Per-effect checks + CPU table |
 

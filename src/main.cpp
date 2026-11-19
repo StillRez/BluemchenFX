@@ -1,23 +1,21 @@
 /**
  * BluemchenFX — effect firmware for the kxmx Bluemchen (Daisy Seed).
  *
- * Audio runs through an effect chain of up to 4 slots (app::Chain). Phase 1
- * of the chaining plan: the UI, knobs, MIDI and SD presets work on slot 1;
- * slots 2-4 exist in the engine and settings but stay empty until the chain
- * UI (docs/design/effect-chaining.md).
+ * Audio runs through an effect chain of up to 4 slots (app::Chain), built
+ * and edited from the panel (docs/design/effect-chaining.md, phase 2). SD
+ * presets and MIDI CCs still cover slot 1 only until phase 3.
  *
- * Controls
- *   Encoder turn      browse pages / change value while editing
- *   Encoder click     enter/leave edit mode (SAVE page: store settings)
- *   Encoder hold      store settings to flash
- *   Knob 1 / 2        absolute control of the routed parameter; takes over
- *                     once the knob is moved
+ * Controls (menu details in ui/ui.h)
+ *   HOME              the chain, one row per slot, then SETUP. Turn selects,
+ *                     click enters, hold stores settings to flash
+ *   Slot / SETUP      turn = page, click = edit value, hold = back to HOME
+ *   Knob 1 / 2        absolute control of the routed parameter (any slot);
+ *                     takes over once the knob is moved
  *   CV 1 / 2          bipolar offset (+-5 V = +-full range) on the routed
  *                     parameter
  *   MIDI CC 20..27    parameter 1..8 of slot 1's effect (any channel)
- *   INPUT page        STEREO, or MONO (left input feeds both channels)
  *   LOAD SD / SAVE SD presets as text files on the microSD card
- *                     (0:/BLUEMCHN/PRESET01.TXT .. PRESET99.TXT)
+ *                     (0:/BLUEMCHN/PRESET01.TXT .. PRESET99.TXT), slot 1
  *   MIDI Program Chg  0..98 loads SD preset 1..99
  */
 #include "daisy_seed.h"
@@ -249,8 +247,8 @@ static void UpdateKnobs(uint32_t now)
             float &dst = settings->slot[rt.slot].norm[rt.param];
             if(fabsf(v - dst) > 0.004f)
             {
-                if(fabsf(v - dst) > 0.01f && rt.slot == gui.EditSlot())
-                    gui.Peek(rt.param, now);
+                if(fabsf(v - dst) > 0.01f)
+                    gui.Peek(rt.slot, rt.param, now);
                 dst = v;
             }
         }
@@ -282,15 +280,16 @@ static void ApplySettings(const app::Settings &next)
     ResetAllKnobs();
 }
 
-static void SwitchEffect(int idx, uint32_t now)
+/** Puts `type` (an effect or FX_NONE) into `slot`, as asked for on its TYPE
+ *  page. The chain swaps click-free in SyncChain(). */
+static void SetSlotType(int slot, uint8_t type, uint32_t now)
 {
-    if(idx < 0 || idx >= fx::FX_COUNT)
-        return;
     app::Settings next = *settings;
-    if(!app::SetSlotType(next, recall, gui.EditSlot(), (uint8_t)idx))
+    if(!app::SetSlotType(next, recall, slot, type))
         return;
     ApplySettings(next);
-    gui.Flash(fx::Prototype(idx)->Name(), now);
+    const fx::Effect *e = fx::Prototype(type);
+    gui.Flash(e ? e->Name() : "EMPTY", now);
 }
 
 // ------------------------------------------------------- SD presets
@@ -394,8 +393,7 @@ static void HandleMidi(uint32_t now)
         if(!e || idx < 0 || idx >= (int)e->NumParams())
             continue;
         settings->slot[0].norm[idx] = cc.value / 127.f;
-        if(gui.EditSlot() == 0)
-            gui.Peek(idx, now);
+        gui.Peek(0, idx, now);
         // a knob routed here must be moved again before it takes over
         for(int k = 0; k < 2; k++)
             if(settings->route[k].Is(0, idx))
@@ -410,7 +408,10 @@ static void Splash()
     d.SetCursor(2, 4);
     d.WriteString("BLUEMCHEN", Font_6x8, true);
     d.SetCursor(2, 18);
-    const fx::Effect *e = fx::Prototype(settings->slot[0].type);
+    // the first effect in the chain
+    const fx::Effect *e = nullptr;
+    for(size_t k = 0; k < app::kNumSlots && !e; k++)
+        e = fx::Prototype(settings->slot[k].type);
     d.WriteString(e ? e->Name() : "--", Font_7x10, true);
     d.Update();
     System::Delay(800);
@@ -446,9 +447,6 @@ int main(void)
         }
     }
     settings = &storage.GetSettings();
-    // Phase 1 UI edits slot 1, so it must hold an effect
-    if(settings->slot[0].type == fx::FX_NONE)
-        app::SetSlotType(*settings, recall, 0, fx::FX_REVERB);
     Diag("3c SETTINGS");
 
     // Build the chain's effects from the stored settings (audio isn't
@@ -459,7 +457,7 @@ int main(void)
             effective[k][i] = settings->slot[k].norm[i];
 
     Diag("4 FX RESET");
-    gui.Init(&hw.display, fx::Prototypes(), fx::FX_COUNT, settings);
+    gui.Init(&hw.display, settings);
     Splash();
     presets.Init(fx::Prototypes(), fx::FX_COUNT); // card is mounted on first use
     Diag("5 SD INIT");
@@ -493,14 +491,17 @@ int main(void)
             gui.OnLongPress(now);
 
         // encoder edits take priority over a knob routed to the same param
-        int edited = gui.TakeEditedParam();
-        if(edited >= 0)
+        int edit_slot, edit_param;
+        if(gui.TakeEditedParam(edit_slot, edit_param))
             for(int k = 0; k < 2; k++)
-                if(settings->route[k].Is(gui.EditSlot(), edited))
+                if(settings->route[k].Is(edit_slot, edit_param))
                     ResetKnobTakeover(k);
         if(gui.TakeRouteChanged())
             ResetAllKnobs();
-        SwitchEffect(gui.TakeEffectRequest(), now);
+        int     type_slot;
+        uint8_t type;
+        if(gui.TakeTypeRequest(type_slot, type))
+            SetSlotType(type_slot, type, now);
 
         // ---- knobs, MIDI, SD
         UpdateKnobs(now);
@@ -528,7 +529,7 @@ int main(void)
         if(now - last_draw >= kDisplayPeriod)
         {
             last_draw = now;
-            gui.Draw(effective[gui.EditSlot()], sqrtf(meter_in), sqrtf(meter_out), now);
+            gui.Draw(effective, sqrtf(meter_in), sqrtf(meter_out), now);
         }
     }
 }

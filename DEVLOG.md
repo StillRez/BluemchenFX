@@ -533,6 +533,68 @@ ones too) and the per-sample bypass/swap ramps, which run even when a slot is st
 path for steady slots (no ramps, process straight into the next buffer) should win most of
 it back. Noted in the design doc; worth doing before heavy effects arrive.
 
+
+## 2026-11-18 — Phase 2: chain UI (HOME / slot pages / SETUP)
+
+The UI now edits the whole chain. Before this phase only slot 1 was reachable from the panel.
+It also replaces the crowded 6-bar HOME page from #8.
+
+**Menus (`src/ui/ui.*`, rewritten)**
+- **HOME:** one row per slot (`1 DELAY`; lowercase = bypassed; `--` = empty), then SETUP
+  below slot 4. The list scrolls, and small arrows show there's more. Turn selects, click
+  opens, hold saves to flash. A thin CPU bar sits left of the I/O meters and inverts at ≥ 95 %
+  peak. The selected row is stored in the settings' `ui_slot` byte, so it survives power cycles.
+- **Slot pages:** TYPE → BYPASS → BYP MODE → parameters, with the slot number in a small box at
+  the top left.
+  - An empty slot only has TYPE.
+  - Opening a slot shows its first parameter the first time, then the page used last.
+  - TYPE offers EMPTY / REVERB / DELAY. Replacing an existing effect needs a second click
+    (`REPLACE?`, `old: REVERB`); turning or holding backs out.
+- **SETUP:** KNOB 1/2 and CV 1/2 can now target any parameter of any slot (`2:FEEDBK`,
+  `NONE`). Then INPUT, a new **OUT** page (−24…+6 dB in 0.5 dB steps, stored as the existing
+  `out_gain`, exactly 1.0 at 0 dB), CPU (`CPU!` at ≥ 95 %), LOAD SD, SAVE SD, SAVE.
+- **Long press** = back to HOME from anywhere (also cancels an edit); on HOME it saves.
+- Knob and MIDI peeks now work for any slot and show the slot number.
+
+**main.cpp:** type changes come from the UI as (slot, type) and go through
+`app::SetSlotType()` as before. Slot 1 may now be empty: the boot-time "slot 1 must hold an
+effect" fix-up is gone. MIDI CCs and SD presets still cover slot 1 only; they are phase 3.
+SAVE SD with an empty slot 1 shows `BAD FX`.
+
+**UI host tests (new).** The UI now draws through libDaisy's `OneBitGraphicsDisplay`
+interface instead of the concrete OLED class. That lets `tests/test_ui.cpp` run the real
+`ui.cpp` against a 64×32 framebuffer that records every string it draws.
+- 11 tests drive it with turns, clicks and holds: building a 4-slot chain (the same effect
+  twice, then emptying a slot), the replace confirmation, back/save, edits landing in the open
+  slot, routes across slots, OUT steps, peeks, a type changing under an open page, and
+  remembered pages.
+- `ui_every_screen_fits_the_display` renders every page of every level (editing, confirming,
+  peeking with 4 source tags) and fails if any text runs past x = 59. It caught a bug that
+  dates back to v0.3: the SD pages' `push:pick` / `push:load` hint ran 2 px into the input
+  meter. Fixed by moving that column 2 px left.
+- `tools/ui_shots.py` turns the tests' screens into a PNG contact sheet:
+  `UI_SHOTS=/tmp/s make -C tests run ARGS=ui_`, then `python3 tools/ui_shots.py /tmp/s sheet.png`.
+
+**Build:** host tests 37/37 pass (7891 checks). Firmware compiles with no warnings (xPack GCC
+13.3.1, the CI toolchain): SRAM 136,336 B (27.7 %), DTCM 61,976 B (47.3 %), essentially
+unchanged. `prebuilt/` updated.
+
+*Status: compiled and host-tested. **Not yet run on hardware.** To check on the module:*
+1. *Power-up: HOME shows `1 REVERB` (or your saved effect), `2 --`, `3 --`, `4 --`. Your
+   saved settings and routing are unchanged.*
+2. *Build a 2–4 slot chain from the panel (e.g. 1 DELAY → 2 REVERB, or two delays). Audio
+   follows each change without clicks, and the other slots keep playing.*
+3. *Replace an effect: the `REPLACE?` step appears; turning or holding backs out. Setting a
+   slot to EMPTY removes the effect.*
+4. *Bypass a slot: its HOME row turns lowercase.*
+5. *SETUP → KNOB 1: route it to a parameter in slot 2. Moving the knob peeks the page with a
+   `2` badge.*
+6. *OUT: −3 dB is audibly quieter, 0 dB back to normal.*
+7. *Hold on a slot page goes back to HOME; hold on HOME saves. After a power cycle the chain,
+   the routing and the HOME selection come back.*
+8. *Check readability: HOME rows, the slot badge, the 4×6 hints.*
+9. *CPU page with 2–4 slots filled: please note the average/peak for the cost table.*
+
 ---
 
 ## Open items
@@ -545,7 +607,7 @@ Tracked as GitHub Issues:
 - ~~#5 Flash headroom: move to the Daisy bootloader~~ (done, v0.5.0)
 - #6 Delay: tap tempo and/or MIDI clock sync
 - #7 Delay sound tuning: feedback saturation
-- #8 UI tweaks: HOME page crowding and other improvements
+- #8 UI tweaks: HOME page crowding and other improvements (HOME replaced in phase 2; hardware check pending)
 - *(no issue yet)* MIDI CC not yet re-tested since the chain engine (Phase 1). StillRez is
   checking the module's MIDI input hardware first.
 - *(no issue yet)* Chain engine overhead (~2 % CPU): add a fast path for steady slots.

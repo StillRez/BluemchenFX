@@ -71,48 +71,57 @@ answering dfu-util's last status request. Check that the `size = …` it reports
 
 ## Controls
 
+Audio runs through a **chain of up to 4 effect slots** (slot 1 → 2 → 3 → 4). Each slot holds
+an effect (REVERB, DELAY; the same one twice is fine) or is empty. Changing an effect,
+bypassing and loading presets crossfade over ~10 ms, so none of them click, and the other
+slots keep playing. Saved settings from earlier versions move into slot 1 automatically.
+
 | Control | Function |
 |---|---|
-| Encoder turn | Move between pages; change the value while editing |
-| Encoder click | Enter/leave edit mode (header inverts while editing). On HOME it jumps to the first parameter; on SAVE it stores settings |
-| EFFECT page | Click, turn to choose **REVERB** or **DELAY**, click to switch. Audio passes dry for a moment while the new effect's buffers are cleared, so there's no burst of old echoes |
-| Encoder hold (0.7 s) | Store all settings to flash ("SAVED") |
-| Knob 1 / Knob 2 | Absolute control of the routed parameter (defaults: reverb **Decay** / **Mix**, delay **Time** / **Mix**). A knob only takes over once you move it, so stored values aren't overwritten at power-up |
+| Encoder turn | HOME: select a slot (or SETUP). On other pages: next/previous page; while editing: change the value |
+| Encoder click | HOME: open the selected slot or SETUP. Elsewhere: enter/leave edit mode (header inverts while editing); on SAVE: store settings |
+| Encoder hold (0.7 s) | HOME: store all settings to flash ("SAVED"). Elsewhere: **back to HOME** (also cancels an edit) |
+| Knob 1 / Knob 2 | Absolute control of the routed parameter, in any slot (defaults: reverb **Decay** / **Mix**, delay **Time** / **Mix**). A knob only takes over once you move it, so stored values aren't overwritten at power-up |
 | CV 1 / CV 2 | Bipolar offset on the routed parameter, ±5 V = ±full range (defaults: reverb **Decay** / **Hi Cut**, delay **Time** / **Feedback**) |
-| MIDI CC 20+ | Parameters of the effect in chain slot 1, in page order, CC 20 = first (reverb: Decay, Mix, Lo Cut, Hi Cut; delay: Time, Feedback, Mix, Ping, Lo Cut, Hi Cut). Any channel |
-| MIDI Program Change 0–98 | Load SD preset 1–99 (switches effect if the preset is for the other one) |
+| MIDI CC 20+ | Parameters of the effect in **slot 1**, in page order, CC 20 = first (reverb: Decay, Mix, Lo Cut, Hi Cut; delay: Time, Feedback, Mix, Ping, Lo Cut, Hi Cut). Any channel. Other slots get CCs in phase 3 |
+| MIDI Program Change 0–98 | Load SD preset 1–99 |
 
-**Effect chain (in progress).** Audio now runs through a chain of up to 4 effect slots (see
-`docs/design/effect-chaining.md`). Until the chain UI arrives, the pages below edit **slot 1**
-and slots 2–4 stay empty, so the module behaves like a single-effect unit. Switching effects,
-bypassing and loading presets crossfade over ~10 ms, so none of them click.
-Your saved settings from earlier versions move into slot 1 automatically.
-| INPUT page | **STEREO** (default) or **MONO**. In mono, the left input is copied to the right channel before any effect processing, so a single cable into the left jack gives full stereo output. "MONO" also shows in the HOME header |
-
-Each effect remembers its own parameter values **and** its own knob/CV assignments, so switching
-back and forth doesn't lose anything.
-
-Moving a knob or sending a CC briefly pops up that parameter's page.
+Moving a knob or sending a CC briefly pops up that parameter's page (with its slot number).
 
 ## Display pages (64×32 OLED)
 
-1. **HOME** – the effect's name and a bar per parameter (live values including CV). `BYP` in
-   the corner when bypassed.
-2. **EFFECT** – REVERB / DELAY. Switching back to an effect brings back the settings it had
-   (until power-off).
-3. **BYPASS** – OFF / ON
-4. **BYP MODE** – TRAILS (bypass mutes the effect's input, so reverb/echo tails ring out) or
+**HOME** shows the chain, one row per slot: `1 DELAY`, `2 reverb` (lowercase = bypassed),
+`3 --` (empty), then **SETUP** below slot 4 (the list scrolls; small arrows show there's more).
+The thin bar right of the list is the CPU load; it inverts when the peak gets close to dropouts.
+The two bars on the far right are the input and output meters.
+
+**Slot pages** (click a slot on HOME). The slot number is in the box at the top left.
+1. **TYPE** – EMPTY / REVERB / DELAY. Click, turn, click. Replacing an effect asks once more
+   (`REPLACE?`): click to confirm, turn or hold to back out. Switching a slot back to an
+   effect it had brings back that effect's settings (until power-off). Knobs/CVs that
+   controlled the slot move to the new effect's usual parameters.
+2. **BYPASS** – OFF / ON
+3. **BYP MODE** – TRAILS (bypass mutes the effect's input, so reverb/echo tails ring out) or
    HARD (cuts the effect immediately and stops processing it, which saves CPU)
-5. **Parameter pages** for the effect (see below)
-6. **KNOB 1 / KNOB 2 / CV 1 / CV 2** – choose which parameter each source controls (or `--`).
-   When you switch effects, sources that controlled the old effect move to the new effect's
-   usual parameters (e.g. Knob 1: Decay on the reverb, Time on the delay).
-7. **INPUT** – STEREO / MONO (click, turn to change, click to confirm; saved with the other settings)
-8. **CPU** – audio processing load: average (large) and peak since the last reset (`pk`). Click
-   resets the peak. The header inverts when the peak reaches 95 %, i.e. close to dropouts.
-9. **LOAD SD** – click, turn to pick a slot (01–99), click again to load it
-10. **SAVE SD** – click, turn to pick a slot, click again to write the current setup to it
-11. **SAVE** – store the current setup to internal flash as the power-up state
+4. **Parameter pages** for the effect (see below). Tags in the header (`K1`, `C2`…) show which
+   knobs/CVs control that parameter.
+
+An empty slot only has TYPE. Opening a slot shows its first parameter the first time, then
+the page you were on last.
+
+**SETUP pages** (click SETUP on HOME)
+1. **KNOB 1 / KNOB 2 / CV 1 / CV 2** – which parameter each source controls: `1:DECAY`,
+   `2:TIME`, … across all slots, or `NONE`
+2. **INPUT** – STEREO / MONO. In mono, the left input is copied to the right channel before any
+   effect processing, so a single cable into the left jack gives full stereo output
+3. **OUT** – output level, −24 to +6 dB in 0.5 dB steps (0 dB = unity). Useful when stacked
+   effects get loud
+4. **CPU** – audio processing load: average (large) and peak since the last reset (`pk`). Click
+   resets the peak. The header shows `CPU!` inverted when the peak reaches 95 %
+5. **LOAD SD** – click, turn to pick a slot (01–99), click again to load it
+6. **SAVE SD** – click, turn to pick a slot, click again to write the current setup to it.
+   Until chain presets (phase 3), a preset holds **slot 1** only
+7. **SAVE** – store the current setup to internal flash as the power-up state
 
 ### Reverb parameters
 
@@ -148,8 +157,9 @@ BLUEMCHN/PRESET01.TXT … PRESET99.TXT
 ```
 
 The LOAD SD / SAVE SD pages show the slot number, which effect a used slot is for (`REVERB` /
-`DELAY`) or `EMPTY` (or `NO CARD`), and the preset's name. Loading a preset for the other effect
-switches to it. Saving writes the active effect. The card is never touched at boot; it's mounted the first time you open
+`DELAY`) or `EMPTY` (or `NO CARD`), and the preset's name. Presets are still single-effect
+until phase 3: loading one puts its effect into slot 1 and empties slots 2–4, and saving
+writes slot 1. The card is never touched at boot; it's mounted the first time you open
 an SD page (the screen shows `SD...` while that happens, and audio keeps running). It can be
 inserted or swapped at any time. Saving to a slot that already has a name keeps that name; new
 slots are named `PRESET nn`.
@@ -214,7 +224,7 @@ src/
   fx/registry.*       the effect list: ids (persisted), metadata prototypes, construction
   fx/reverb.*         ReverbSc + SVF lo-cut + equal-power mix
   fx/delay.*          stereo delay: SDRAM delay lines, one-pole loop filters, ping-pong
-  ui/ui.*             page/menu system and OLED drawing
+  ui/ui.*             menus (HOME chain overview, slot pages, SETUP) and OLED drawing
   app/settings.h      persisted settings v3: chain slots, routing (QSPI, last 4 KB sector)
   app/chain.*         chain engine: 4 serial slots, click-free bypass / effect swaps
   app/chain_settings.* defaults, validation, v1/v2 migration, slot recall (no hardware deps)
@@ -236,7 +246,7 @@ process audio in `Process`, clear buffers in `Reset`, and say which parameters t
 should control by default in `DefaultRoute`. Take big buffers from the arena passed to
 `Init(sample_rate, arena)` and keep no global state: a chain can hold several copies of the
 same effect. Then **append** it to `EffectId` and the tables in `src/fx/registry.cpp` (never
-reorder: the id is saved in flash). The EFFECT page, parameter pages, knob/CV routing, MIDI CCs,
+reorder: the id is saved in flash). The TYPE page, parameter pages, knob/CV routing, MIDI CCs,
 presets and flash storage all follow from the parameter table (up to 8 parameters). Also add it
 to the lists in `tests/test_effects.cpp` and `tests/test_chain.cpp`, so CI checks it for
 stability (a test fails if you forget).

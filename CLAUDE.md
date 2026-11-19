@@ -81,14 +81,15 @@ src/fx/arena.h          bump allocator over a slot's SDRAM arena (no free; Reset
 src/fx/registry.*       EffectId (persisted), prototypes (metadata), Construct/Destroy
 src/fx/reverb.*         ReverbSc (SDRAM) + SVF lo cut + equal-power mix; decay = RT60 seconds
 src/fx/delay.*          stereo delay <= 2 s (SDRAM DelayLines), OnePole loop filters, ping-pong
-src/ui/ui.*             page/menu system, 64x32 drawing
+src/ui/ui.*             menus: HOME (chain) / slot pages / SETUP; draws via OneBitGraphicsDisplay
 src/app/settings.h      persisted POD struct v3 (chain: 4 SlotStates + Route per source), legacy v1/v2
 src/app/chain.*         chain engine: serial slots, per-slot g/b ramps, click-free swap/bypass
 src/app/chain_settings.* defaults, Valid(), MigrateV1/V2, SetSlotType (recall + routes), preset bridge
 src/app/preset_text.*   preset text format (hardware-independent, host-testable)
 src/app/preset_store.*  SD mount + slot files (FatFS)
 sd-card/BLUEMCHN/       example presets
-tests/                  host tests: `make -C tests run` (DSP stability, presets); CI gates the build on them
+tests/                  host tests: `make -C tests run` (DSP, presets, settings, chain, UI); CI gates the build on them
+tools/ui_shots.py       UI tests' screens -> PNG contact sheet (UI_SHOTS=dir make -C tests run ARGS=ui_)
 docs/design/            design docs (effect chaining plan, phases 0-4)
 ```
 
@@ -114,7 +115,8 @@ docs/design/            design docs (effect chaining plan, phases 0-4)
   has faded out (audio no longer touches the old effect). Never destroy or Init an effect the
   audio might be running. Params reach an effect only while `settings->slot[k].type` matches the
   loaded type (avoids the old effect getting the new one's values mid-fade, a click the tests
-  caught). Phase 1: the UI/MIDI/presets work on slot 1 only (`gui.EditSlot()` is always 0).
+  caught). Since phase 2 the UI edits every slot; MIDI CCs and SD presets still cover slot 1
+  only until phase 3.
 - **`Settings` layout is persisted** (v3 = `0xB10E0003`, 164 bytes, pinned by the
   `settings_layout_is_stable` test). Adding fields: use `pad` bytes where zero means "old
   behaviour", or bump the version **and** add a migration (see `MigrateV2()` and
@@ -122,6 +124,13 @@ docs/design/            design docs (effect chaining plan, phases 0-4)
 - **Don't use `daisysp::Svf` inside feedback loops.** Its built-in cubic drive term
   (`band -= 0.5*band^3`) goes unstable at the levels a saturating loop reaches (host test blew
   up at 95 % feedback). Use `daisysp::OnePole` there. Svf is fine on bounded inputs (reverb send).
+- **UI** (`src/ui/ui.*`): three levels, HOME → slot pages / SETUP; long press = back (on HOME:
+  save). It draws through `daisy::OneBitGraphicsDisplay`, so `tests/test_ui.cpp` runs it against
+  a framebuffer: navigation tests plus `ui_every_screen_fits_the_display`, which fails if any
+  text runs past x = 59 into the meter columns (it caught the SD pages' hint doing that). New
+  pages: add them there. To look at the screens: `UI_SHOTS=/tmp/s make -C tests run ARGS=ui_`
+  then `python3 tools/ui_shots.py /tmp/s sheet.png`. The 4x6 font's lowercase is hard to read
+  (w, g, p); keep 4x6 hints short.
 - **No float `printf`/`snprintf("%f")`** (newlib-nano). Format with integers, as `FormatValue`
   and `FormatReal` do.
 - **Audio ISR vs main loop:** the audio callback is the only writer of encoder counters and
