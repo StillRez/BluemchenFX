@@ -595,6 +595,54 @@ unchanged. `prebuilt/` updated.
 8. *Check readability: HOME rows, the slot badge, the 4×6 hints.*
 9. *CPU page with 2–4 slots filled: please note the average/peak for the cost table.*
 
+
+## 2026-11-18 — Phase 2 verified on hardware ✅ (closes #8); small text in capitals
+
+StillRez's checklist: all passed.
+- The saved setup came back in slot 1.
+- He built a 2–4 slot chain from the panel with no clicks.
+- `REPLACE?` and EMPTY both work.
+- A knob routed to slot 2 peeks with a `2` badge.
+- OUT at −3 dB is quieter.
+- Hold goes back on slot pages and saves on HOME.
+- The chain and routing survive a power cycle.
+
+**CPU:** DELAY → REVERB → REVERB → REVERB reads **≈ 55 % average / 66 % peak**. That's above the
+sum of the single-effect numbers (5 + 3 × 14 ≈ 47 %). The difference is the chain engine's
+overhead plus three reverb tanks competing for the SDRAM cache. It's still a third of the
+budget free at peak. Added to the cost table in the design doc.
+
+**Small text → capitals.** StillRez found the lowercase hint line (4×6 font) hard to read.
+All 4×6 text now goes through `DrawSmall()`, which uppercases it (hints, `OLD: DELAY`, SD
+status, preset names on the SD pages). The layout test now also fails on lowercase 4×6 text.
+Bypassed slots on HOME stay lowercase (6×8 font, readable). *Compiled and host-tested
+(37/37); the capitals are not yet seen on the module.*
+
+**Audio peaking about a second after power-up: investigated, not a start-up bug.**
+StillRez heard peaking about a second after the effects loaded (D → R → R → R). I reproduced
+the chain on the host from a cold start with steady input, and measured output peak and RMS
+per 100 ms:
+
+| Chain (defaults) | Sustained 220 Hz sine, peak 0.5 | Noise, RMS 0.25 |
+|---|---|---|
+| D | peak 0.49 | RMS 0.22 |
+| R | peak **1.02** | – |
+| R → R | peak **1.82** | – |
+| R → R → R | peak **3.14** | RMS 0.21 |
+| D → R → R → R | peak **2.72** | RMS 0.19 |
+
+- Each ReverbSc roughly **doubles the peak on tonal, sustained input**: the tank's resonances
+  pile up on a steady pitch. Broadband material stays level.
+- In series this compounds to about +15 dB. The tanks need a few hundred ms to fill, which
+  matches the "about a second".
+- The output then goes past full scale and clips at the codec. It happens whenever a held note
+  starts into such a chain, not only at power-up.
+- Ruled out: uninitialised SDRAM (ReverbSc and DelayLine both zero their buffers on Init), the
+  CV/ADC start-up (2 ms slew), and parameter smoothing (~10 ms).
+
+Fix options are a sound-design call for StillRez. Until then, the OUT page (−6 dB or so)
+avoids the clipping.
+
 ---
 
 ## Open items
@@ -607,7 +655,8 @@ Tracked as GitHub Issues:
 - ~~#5 Flash headroom: move to the Daisy bootloader~~ (done, v0.5.0)
 - #6 Delay: tap tempo and/or MIDI clock sync
 - #7 Delay sound tuning: feedback saturation
-- #8 UI tweaks: HOME page crowding and other improvements (HOME replaced in phase 2; hardware check pending)
+- ~~#8 UI tweaks: HOME page crowding~~ (done: phase 2 chain HOME, small text in capitals)
+- *(no issue yet)* Output peaking with stacked reverbs on sustained notes (see 2026-11-18, phase 2 verified)
 - *(no issue yet)* MIDI CC not yet re-tested since the chain engine (Phase 1). StillRez is
   checking the module's MIDI input hardware first.
 - *(no issue yet)* Chain engine overhead (~2 % CPU): add a fast path for steady slots.

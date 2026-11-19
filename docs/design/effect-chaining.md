@@ -1,6 +1,6 @@
 # Design: effect chaining
 
-Status: **approved design**, phases 0–1 done and verified on hardware, phase 2 built (hardware check pending). Date: 2026-11-18. All open questions answered.
+Status: **approved design**, phases 0–1 done and verified on hardware, phase 2 done and verified on hardware. Date: 2026-11-18. All open questions answered.
 
 ## Decisions already made (StillRez, 2026-11-18)
 
@@ -140,6 +140,7 @@ At 48 kHz with 32-sample blocks, the callback has **667 µs** per block.
   | REVERB | **14 % / 17 %** (2026-11-18) | 2.3 |
   | DELAY | **5 % / 5 %** (2026-11-18) | 5.9 |
   | DELAY in slot 1 of the phase-1 chain engine | **7 % / 8 %** (2026-11-18) | – |
+  | DELAY → REVERB → REVERB → REVERB (phase 2) | **≈ 55 % / 66 %** (2026-11-18) | – |
 
   The host column has them in the *opposite* order: on the STM32 the reverb's eight
   interpolated delay lines in SDRAM (cache misses) dominate, while on a PC everything sits in
@@ -149,7 +150,10 @@ At 48 kHz with 32-sample blocks, the callback has **667 µs** per block.
   per-sample bypass/swap ramps, which run even when a slot is steady. A fast path (skip the
   ramps once g = 1 and b = 0, process straight into the next buffer) should win most of that
   back; it's worth doing before heavy effects arrive. Headroom check: four reverbs in a chain ≈ 4 × 14 % ≈ 56 %, so the
-  current effects fit comfortably in any 4-slot combination.
+  current effects fit comfortably in any 4-slot combination. Measured: D → R → R → R reads
+  ≈ 55 % / 66 %, above the 5 + 3 × 14 ≈ 47 % sum; the difference is the chain engine overhead
+  (≈ 2 %) plus SDRAM cache contention between three reverb tanks. Still a third of the budget
+  free at peak.
 
 - Cheap effects (filters, drive, wavefolder, bit/SR reduction, dynamics, tremolo/chorus)
   should cost only a few percent each. The ones to measure before promising anything are
@@ -301,7 +305,7 @@ Each phase is one or more commits and ends with a hardware check by StillRez.
 |---|---|---|
 | 0 | CPU meter + host test harness in CI. No behaviour change. **Done, verified on hardware (2026-11-18).** | CPU % shown, reverb/delay costs recorded |
 | 1 | Arena + per-slot instances, chain engine, settings v3 + migration. The UI temporarily edits slot 1 only (plus BYPASS / BYP MODE pages). **Done, verified on hardware (2026-11-18)** except MIDI CC (not tested yet). | Old settings come back in slot 1; no clicks on bypass/swap |
-| 2 | Hierarchical UI: HOME overview, slot pages, setup menu, long press = back. **Built 2026-11-18, host-tested; hardware check pending.** | Build a 2–4 slot chain from the panel; closes #8 |
+| 2 | Hierarchical UI: HOME overview, slot pages, setup menu, long press = back. **Done, verified on hardware (2026-11-18).** | Build a 2–4 slot chain from the panel; closes #8 |
 | 3 | Chain presets + CC map | Old and new presets load; MIDI CCs reach slots 2–4 |
 | 4 | New effects, cheapest first: filter/drive, wavefolder, bit/SR reduction, tremolo/chorus, compressor/limiter; then pitch/granular; then the looper (large pool) | Per-effect checks + CPU table |
 

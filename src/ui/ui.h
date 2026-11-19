@@ -153,6 +153,8 @@ class Ui
     void DrawSave();
     void DrawHeader(const char *title, bool inverted, const char *tag, int slot = -1);
     void DrawHint(const char *hint);
+    /** 4x6 text at x, y, always in capitals. */
+    void DrawSmall(int x, int y, const char *text);
     void DrawMeters(float in, float out);
     void DrawMessage(const char *msg);
 

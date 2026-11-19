@@ -539,10 +539,22 @@ void Ui::DrawHeader(const char *title, bool inverted, const char *tag, int slot)
     }
 }
 
+void Ui::DrawSmall(int x, int y, const char *text)
+{
+    // The 4x6 font's lowercase is hard to read on the OLED (hardware
+    // feedback, phase 2): small text is always shown in capitals.
+    char buf[24];
+    size_t i = 0;
+    for(; text[i] && i < sizeof(buf) - 1; i++)
+        buf[i] = (text[i] >= 'a' && text[i] <= 'z') ? (char)(text[i] - 'a' + 'A') : text[i];
+    buf[i] = 0;
+    disp_->SetCursor(x, y);
+    disp_->WriteString(buf, Font_4x6, true);
+}
+
 void Ui::DrawHint(const char *hint)
 {
-    disp_->SetCursor(0, 26);
-    disp_->WriteString(hint, Font_4x6, true);
+    DrawSmall(0, 26, hint);
 }
 
 void Ui::DrawHome()
@@ -632,8 +644,7 @@ void Ui::DrawType(bool editing)
         const fx::Effect *old = fx::Prototype(cur);
         char              buf[16];
         snprintf(buf, sizeof(buf), "old: %s", old ? old->Name() : "--");
-        disp_->SetCursor(0, 19);
-        disp_->WriteString(buf, Font_4x6, true);
+        DrawSmall(0, 19, buf);
         DrawHint("push:ok turn:no");
         return;
     }
@@ -734,12 +745,8 @@ void Ui::DrawSd(bool load, bool editing)
                          : !sd_used_     ? sd_text_
                          : sd_detail_[0] ? sd_detail_
                                          : "used";
-    disp_->SetCursor(24, 10);
-    disp_->WriteString(status, Font_4x6, true);
-    disp_->SetCursor(24, 18);
-    disp_->WriteString(editing ? (load ? "push:load" : "push:save") : "push:pick",
-                       Font_4x6,
-                       true);
+    DrawSmall(24, 10, status);
+    DrawSmall(24, 18, editing ? (load ? "push:load" : "push:save") : "push:pick");
     // bottom line: preset name, or an error code if something failed
     const char *bottom = !fresh ? "" : (sd_used_ ? sd_text_ : sd_detail_);
     if(bottom[0])

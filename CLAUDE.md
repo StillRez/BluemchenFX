@@ -129,8 +129,9 @@ docs/design/            design docs (effect chaining plan, phases 0-4)
   a framebuffer: navigation tests plus `ui_every_screen_fits_the_display`, which fails if any
   text runs past x = 59 into the meter columns (it caught the SD pages' hint doing that). New
   pages: add them there. To look at the screens: `UI_SHOTS=/tmp/s make -C tests run ARGS=ui_`
-  then `python3 tools/ui_shots.py /tmp/s sheet.png`. The 4x6 font's lowercase is hard to read
-  (w, g, p); keep 4x6 hints short.
+  then `python3 tools/ui_shots.py /tmp/s sheet.png`. Small (4x6) text always goes through `DrawSmall()`/`DrawHint()`, which
+  uppercase it: its lowercase is hard to read on the OLED (StillRez, hardware). The layout test
+  fails on lowercase 4x6 text.
 - **No float `printf`/`snprintf("%f")`** (newlib-nano). Format with integers, as `FormatValue`
   and `FormatReal` do.
 - **Audio ISR vs main loop:** the audio callback is the only writer of encoder counters and

@@ -191,6 +191,11 @@ struct Rig
         for(const FrameBuffer::Text &t : fb.texts)
             CHECKF(t.x + t.w <= edge && t.y + t.h <= 32,
                    "%s: '%s' at x=%d w=%d", where, t.str.c_str(), t.x, t.w);
+        // small (4x6) text: capitals only, its lowercase is hard to read
+        for(const FrameBuffer::Text &t : fb.texts)
+            if(t.h == 6)
+                for(char c : t.str)
+                    CHECKF(!(c >= 'a' && c <= 'z'), "%s: lowercase in '%s'", where, t.str.c_str());
         for(int y = 0; y < 32; y++)
             for(int x = edge; x < 64; x++)
                 if(fb.px[y][x] && !(home && x == 59)) // CPU bar
@@ -280,7 +285,7 @@ TEST(ui_replacing_an_effect_needs_confirmation)
     r.Turn(1); // DELAY
     r.Click();
     CHECK(r.gui.Confirming());
-    CHECK(r.fb.Has("REPLACE?") && r.fb.Has("old: REVERB"));
+    CHECK(r.fb.Has("REPLACE?") && r.fb.Has("OLD: REVERB"));
     CHECK(r.s.slot[0].type == fx::FX_REVERB);
 
     r.Turn(1); // turning backs out of the confirmation (now: EMPTY)
