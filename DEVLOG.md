@@ -513,6 +513,26 @@ hardware.** To check on the module:*
 6. *Save (long press) + power cycle keeps everything, including bypass.*
 7. *CPU page: about the same as before (reverb ~14 %, delay ~5 %).*
 
+
+## 2026-11-18 — Phase 1 verified on hardware ✅ (MIDI CC pending)
+
+StillRez flashed the Phase 1 build. Everything on the checklist passed:
+- settings migrated into slot 1;
+- REVERB ↔ DELAY switches are click-free and recall the previous values;
+- bypass in both modes, no clicks, and HARD leaves no stale echoes;
+- knobs follow the effect after a switch;
+- SD presets load and save;
+- save + power cycle.
+
+**Not tested yet: MIDI CC.** StillRez wants to check the module's MIDI input hardware first.
+Still to confirm.
+
+**CPU:** DELAY in slot 1 now reads **7 % average / 8 % peak** (Phase 0: 5 % / 5 %). The
+roughly 2 % comes from the chain engine itself: per-slot buffer copies for all 4 slots (empty
+ones too) and the per-sample bypass/swap ramps, which run even when a slot is steady. A fast
+path for steady slots (no ramps, process straight into the next buffer) should win most of
+it back. Noted in the design doc; worth doing before heavy effects arrive.
+
 ---
 
 ## Open items
@@ -526,6 +546,9 @@ Tracked as GitHub Issues:
 - #6 Delay: tap tempo and/or MIDI clock sync
 - #7 Delay sound tuning: feedback saturation
 - #8 UI tweaks: HOME page crowding and other improvements
+- *(no issue yet)* MIDI CC not yet re-tested since the chain engine (Phase 1). StillRez is
+  checking the module's MIDI input hardware first.
+- *(no issue yet)* Chain engine overhead (~2 % CPU): add a fast path for steady slots.
 - *(no issue yet)* Tune each effect's default settings (`ParamSpec::def`) by ear, so loading an
   effect into an empty slot sounds good straight away. StillRez will do this on the module.
   Claude's session couldn't open the issue (the repo rename broke API writes from it).
