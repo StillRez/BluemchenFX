@@ -26,7 +26,7 @@ struct Recall
 void DefaultNorms(uint8_t type, float *norm);
 
 /** Factory settings: REVERB in slot 1 with its default routing, slots 2-4
- *  empty, stereo input, unity output. */
+ *  empty, stereo input, unity output, limiter at -1 dB / 150 ms. */
 Settings MakeDefaults();
 
 /** Whether `s` is a plausible v3 settings block (version, types, ranges,
@@ -37,6 +37,10 @@ bool Valid(const Settings &s);
  *  parameters and routing; the other effects' stored parameters seed
  *  `recall` for slot 1 (if given). False if `v2` isn't valid. */
 bool MigrateV2(const SettingsV2 &v2, Settings &out, Recall *recall);
+
+/** v3 (chain, no limiter) -> v4: everything kept, limiter at its
+ *  defaults. False if `v3` isn't valid. */
+bool MigrateV3(const SettingsV3 &v3, Settings &out);
 
 /** v1 (reverb only) -> v3. False if `v1` isn't valid. */
 bool MigrateV1(const SettingsV1 &v1, Settings &out);

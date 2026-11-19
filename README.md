@@ -116,12 +116,20 @@ the page you were on last.
    effect processing, so a single cable into the left jack gives full stereo output
 3. **OUT** – output level, −24 to +6 dB in 0.5 dB steps (0 dB = unity). Useful when stacked
    effects get loud
-4. **CPU** – audio processing load: average (large) and peak since the last reset (`pk`). Click
+4. **LIMIT** – ceiling of the always-on output limiter, −12 to 0 dB (default −1 dB). The
+   bottom line shows the live gain reduction (`GR -3.4 DB`), and an `ON` tag appears in the
+   header while it's limiting. Stacked effects can get much louder than their input (three
+   reverbs push a held note about +15 dB). The limiter holds the output just under the ceiling
+   instead of letting it clip at the codec. Below the ceiling minus 1 dB it doesn't touch the
+   sound
+5. **LIM REL** – how fast the limiter lets go, 20 ms to 1 s (default 150 ms). Short is
+   punchier but can distort low notes; long is smoother
+6. **CPU** – audio processing load: average (large) and peak since the last reset (`pk`). Click
    resets the peak. The header shows `CPU!` inverted when the peak reaches 95 %
-5. **LOAD SD** – click, turn to pick a slot (01–99), click again to load it
-6. **SAVE SD** – click, turn to pick a slot, click again to write the current setup to it.
+7. **LOAD SD** – click, turn to pick a slot (01–99), click again to load it
+8. **SAVE SD** – click, turn to pick a slot, click again to write the current setup to it.
    Until chain presets (phase 3), a preset holds **slot 1** only
-7. **SAVE** – store the current setup to internal flash as the power-up state
+9. **SAVE** – store the current setup to internal flash as the power-up state
 
 ### Reverb parameters
 

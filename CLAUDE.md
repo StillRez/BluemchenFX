@@ -82,11 +82,12 @@ src/fx/registry.*       EffectId (persisted), prototypes (metadata), Construct/D
 src/fx/reverb.*         ReverbSc (SDRAM) + SVF lo cut + equal-power mix; decay = RT60 seconds
 src/fx/delay.*          stereo delay <= 2 s (SDRAM DelayLines), OnePole loop filters, ping-pong
 src/ui/ui.*             menus: HOME (chain) / slot pages / SETUP; draws via OneBitGraphicsDisplay
-src/app/settings.h      persisted POD struct v3 (chain: 4 SlotStates + Route per source), legacy v1/v2
+src/app/settings.h      persisted POD struct v4 (chain: 4 SlotStates + Route per source, limiter), legacy v1-v3
 src/app/chain.*         chain engine: serial slots, per-slot g/b ramps, click-free swap/bypass
 src/app/chain_settings.* defaults, Valid(), MigrateV1/V2, SetSlotType (recall + routes), preset bridge
 src/app/preset_text.*   preset text format (hardware-independent, host-testable)
 src/app/preset_store.*  SD mount + slot files (FatFS)
+src/app/limiter.*       always-on output limiter (after OUT): peak env + soft clip, never past the ceiling
 sd-card/BLUEMCHN/       example presets
 tests/                  host tests: `make -C tests run` (DSP, presets, settings, chain, UI); CI gates the build on them
 tools/ui_shots.py       UI tests' screens -> PNG contact sheet (UI_SHOTS=dir make -C tests run ARGS=ui_)
@@ -117,10 +118,15 @@ docs/design/            design docs (effect chaining plan, phases 0-4)
   loaded type (avoids the old effect getting the new one's values mid-fade, a click the tests
   caught). Since phase 2 the UI edits every slot; MIDI CCs and SD presets still cover slot 1
   only until phase 3.
-- **`Settings` layout is persisted** (v3 = `0xB10E0003`, 164 bytes, pinned by the
-  `settings_layout_is_stable` test). Adding fields: use `pad` bytes where zero means "old
-  behaviour", or bump the version **and** add a migration (see `MigrateV2()` and
-  `ReadLegacySettings()` in `main.cpp`), so users keep their settings.
+- **`Settings` layout is persisted** (v4 = `0xB10E0004`, 172 bytes = v3 + limiter ceiling and
+  release appended; pinned by the `settings_layout_is_stable` test). Adding fields: use `pad`
+  bytes where zero means "old behaviour", or bump the version **and** add a migration (see
+  `MigrateV3()`, which copies the v3 prefix, and `ReadLegacySettings()` in `main.cpp`), so users
+  keep their settings. v1, v2 and v3 all still migrate.
+- **Output limiter** (`app::Limiter`, after OUT in the audio callback): always on. Stacked
+  ReverbSc raise sustained tonal input a lot (+15 dB over three), so don't remove it or make it
+  bypassable without a replacement. Below ceiling − 1 dB it's bit-exact (tested). Parameters come
+  from the settings via `SyncLimiter()` in `main.cpp`, only when they change.
 - **Don't use `daisysp::Svf` inside feedback loops.** Its built-in cubic drive term
   (`band -= 0.5*band^3`) goes unstable at the levels a saturating loop reaches (host test blew
   up at 95 % feedback). Use `daisysp::OnePole` there. Svf is fine on bounded inputs (reverb send).

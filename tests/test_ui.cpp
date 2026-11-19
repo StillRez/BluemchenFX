@@ -440,6 +440,43 @@ TEST(ui_out_level_in_half_db_steps)
     CHECK(app::Valid(r.s));
 }
 
+TEST(ui_limiter_pages)
+{
+    Rig r;
+    r.Turn(10);
+    r.Click();
+    r.Turn(6); // KNOB 1 .. CV 2, INPUT, OUT, LIMIT
+    CHECK(r.gui.CurrentPage().kind == ui::Ui::PAGE_LIMIT);
+    CHECKF(r.fb.Has("-1.0dB") && r.fb.Has("GR 0.0 DB"), "%s", r.fb.All().c_str());
+    r.Click();
+    r.Turn(-4);
+    CHECK(r.s.limit_db == -3.f);
+    r.Turn(-100);
+    CHECK(r.s.limit_db == app::kLimitMinDb);
+    r.Turn(100);
+    CHECK(r.s.limit_db == app::kLimitMaxDb);
+    CHECK(r.fb.Has("0.0dB"));
+    r.Click();
+
+    // live gain reduction, with an ON tag while limiting
+    r.gui.SetLimiterGr(-3.44f);
+    r.Draw();
+    CHECKF(r.fb.Has("GR -3.4 DB") && r.fb.Has("ON"), "%s", r.fb.All().c_str());
+    r.gui.SetLimiterGr(0.f);
+    r.Draw();
+    CHECK(!r.fb.Has("ON"));
+
+    r.Turn(1); // LIM REL
+    CHECK(r.gui.CurrentPage().kind == ui::Ui::PAGE_RELEASE);
+    CHECK(r.fb.Has("150ms"));
+    r.Click();
+    r.Turn(-100);
+    CHECK(std::fabs(r.s.limit_rel - app::kReleaseMinSec) < 1e-6f && r.fb.Has("20ms"));
+    r.Turn(100);
+    CHECK(std::fabs(r.s.limit_rel - app::kReleaseMaxSec) < 1e-6f && r.fb.Has("1.00s"));
+    CHECK(app::Valid(r.s));
+}
+
 TEST(ui_peek_shows_any_slot)
 {
     Rig r;

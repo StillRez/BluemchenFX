@@ -28,6 +28,7 @@ FW_SOURCES := \
 	$(SRC)/fx/registry.cpp \
 	$(SRC)/app/chain.cpp \
 	$(SRC)/app/chain_settings.cpp \
+	$(SRC)/app/limiter.cpp \
 	$(SRC)/app/preset_text.cpp \
 	$(SRC)/ui/ui.cpp
 

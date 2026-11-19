@@ -47,6 +47,12 @@ the effects include. CI runs them on every push, and the firmware build waits fo
 | `ui_routes_reach_every_slot` | KNOB/CV pages list every parameter of every filled slot, plus NONE |
 | `ui_out_level_in_half_db_steps` | OUT page: 0.5 dB steps, exact unity back at 0 dB, −24…+6 dB |
 | `ui_peek_shows_any_slot`, `ui_survives_type_changes_underneath`, `ui_remembers_selection_and_pages` | peeks, effect changed under an open page, remembered pages and HOME selection |
+| `ui_limiter_pages` | LIMIT (−12…0 dB, live GR + `ON` tag) and LIM REL (20 ms…1 s) pages |
+| `settings_migrate_v3` | a phase 1/2 chain setup survives the move to v4; the limiter gets its defaults |
+| `limiter_is_transparent_below_threshold` | bit-exact below ceiling − 1 dB |
+| `limiter_never_exceeds_the_ceiling` | random bursts up to +24 dB, several ceilings and releases: never past the ceiling |
+| `limiter_holds_a_loud_tone_at_threshold_and_recovers` | a +12 dB tone settles near the threshold; gain comes back after the release |
+| `limiter_tames_stacked_reverbs` | the held note through DELAY → 3 × REVERB: +8.7 dBFS raw, under −1 dBFS limited |
 | `ui_every_screen_fits_the_display` | every page of every level, editing or not: no text past x = 59 (the meters) |
 
 **Adding an effect:** add it to `g_effects[]` at the top of `test_effects.cpp` and to the

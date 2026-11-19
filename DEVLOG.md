@@ -643,6 +643,53 @@ per 100 ms:
 Fix options are a sound-design call for StillRez. Until then, the OUT page (−6 dB or so)
 avoids the clipping.
 
+
+## 2026-11-18 — Always-on output limiter (#10)
+
+StillRez chose option 1 for the stacked-reverb peaking: a soft limiter at the output that is
+always on, with its parameters in SETUP.
+
+**DSP (`src/app/limiter.*`, after OUT in the audio callback)**
+- A stereo-linked peak envelope rises instantly and falls with the release time. It sets a
+  gain that brings the peaks down to a threshold 1 dB under the ceiling. The gain falls over
+  ~0.5 ms (attack), so it doesn't jump inside a waveform cycle.
+- A soft clip (tanh shape) between the threshold and the ceiling catches what the attack lets
+  through. The output never goes past the ceiling: in float, a huge overshoot lands exactly on
+  it.
+- Below the threshold the signal is bit-exact (gain exactly 1, soft clip off).
+- No look-ahead, so no added latency. Cost per sample is two `fabsf`, a compare and a
+  multiply, plus `tanhf` only on overs.
+
+**UI:** two new SETUP pages after OUT.
+- **LIMIT**: ceiling −12…0 dB in 0.5 dB steps, default −1 dB. The bottom line shows the live
+  gain reduction (`GR -3.4 DB`), and an `ON` tag appears while it's limiting. I first had the
+  header invert while limiting, but dropped that: inverted means "editing" everywhere else.
+- **LIM REL**: release 20 ms…1 s, ~10 % per detent, default 150 ms.
+
+**Settings v4** (`0xB10E0004`, 172 bytes): v3 plus `limit_db` and `limit_rel` appended.
+`MigrateV3()` copies the v3 prefix and sets the limiter defaults. `static_assert`s pin the
+prefix, and `ReadLegacySettings()` handles v3 as well as v2 and v1. The limiter is a global
+setting; chain presets (phase 3) won't change it unless we decide otherwise.
+
+**Host tests:** 6 new, 43 in total, all pass.
+- Transparent below the threshold (bit-exact).
+- Never past the ceiling: random bursts up to +24 dB, 4 ceilings × 3 releases.
+- A +12 dB tone settles at −2.3…−1 dBFS with ~14 dB of gain reduction, and recovers fully
+  within 0.5 s of quiet.
+- **The DELAY → 3 × REVERB held note: +8.7 dBFS raw → −1.5 dBFS limited.**
+- v3 → v4 migration keeps the chain, routes, input, OUT and HOME selection.
+- LIMIT / LIM REL pages, including the `ON` tag and their ranges.
+
+**Build:** compiles with no warnings. SRAM 138,612 B (28.2 %), DTCM 47.3 %. `prebuilt/` updated.
+
+*Status: compiled and host-tested. **Not yet run on hardware.** To check on the module:*
+1. *After flashing, your chain, routing and OUT come back (v3 → v4 migration).*
+2. *The D → R → R → R chain with a held note: no more harsh clipping. SETUP → LIMIT shows GR
+   and `ON` while it works.*
+3. *Normal-level playing sounds the same as before.*
+4. *Try LIMIT at −6 dB and LIM REL at 20 ms vs 1 s to hear the range.*
+5. *CPU page: about the same as before (≈ 55 % / 66 % for D → R → R → R).*
+
 ---
 
 ## Open items
@@ -656,7 +703,7 @@ Tracked as GitHub Issues:
 - #6 Delay: tap tempo and/or MIDI clock sync
 - #7 Delay sound tuning: feedback saturation
 - ~~#8 UI tweaks: HOME page crowding~~ (done: phase 2 chain HOME, small text in capitals)
-- *(no issue yet)* Output peaking with stacked reverbs on sustained notes (see 2026-11-18, phase 2 verified)
+- #10 Output limiter for stacked-effect peaking (built, hardware check pending)
 - *(no issue yet)* MIDI CC not yet re-tested since the chain engine (Phase 1). StillRez is
   checking the module's MIDI input hardware first.
 - *(no issue yet)* Chain engine overhead (~2 % CPU): add a fast path for steady slots.

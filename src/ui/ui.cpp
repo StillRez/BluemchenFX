@@ -19,7 +19,7 @@ static constexpr float    kStepFast   = 0.04f;
 // Slot pages: TYPE, BYPASS, BYP MODE, then the parameters
 static constexpr int kFirstParamPage = 3;
 // Setup pages: the 4 routes, then these
-static constexpr int kSetupExtra = 6; // INPUT, OUT, CPU, LOAD SD, SAVE SD, SAVE
+static constexpr int kSetupExtra = 8; // INPUT, OUT, LIMIT, LIM REL, CPU, LOAD SD, SAVE SD, SAVE
 
 static const char *const kSourceTitle[app::SRC_LAST]
     = {"KNOB 1", "KNOB 2", "CV 1", "CV 2"};
@@ -83,9 +83,11 @@ Ui::Page Ui::PageAt(int p) const
     {
         case 0: return {PAGE_INPUT, 0};
         case 1: return {PAGE_OUT, 0};
-        case 2: return {PAGE_CPU, 0};
-        case 3: return {PAGE_SD_LOAD, 0};
-        case 4: return {PAGE_SD_SAVE, 0};
+        case 2: return {PAGE_LIMIT, 0};
+        case 3: return {PAGE_RELEASE, 0};
+        case 4: return {PAGE_CPU, 0};
+        case 5: return {PAGE_SD_LOAD, 0};
+        case 6: return {PAGE_SD_SAVE, 0};
         default: return {PAGE_SAVE, 0};
     }
 }
@@ -258,6 +260,24 @@ void Ui::TurnValue(int32_t inc, uint32_t now_ms)
             db += (fast ? 1.f : 0.5f) * (float)dir;
             db = db < kOutMinDb ? kOutMinDb : (db > kOutMaxDb ? kOutMaxDb : db);
             settings_->out_gain = db == 0.f ? 1.f : powf(10.f, db / 20.f);
+            break;
+        }
+        case PAGE_LIMIT:
+        {
+            float db = roundf(settings_->limit_db * 2.f) * 0.5f;
+            db += (fast ? 1.f : 0.5f) * (float)dir;
+            settings_->limit_db = db < app::kLimitMinDb   ? app::kLimitMinDb
+                                  : db > app::kLimitMaxDb ? app::kLimitMaxDb
+                                                          : db;
+            break;
+        }
+        case PAGE_RELEASE:
+        {
+            // ~10 % per detent (fast: 25 %), 20 ms .. 1 s in ~40 detents
+            float r = settings_->limit_rel * powf(fast ? 1.25f : 1.1f, (float)dir);
+            settings_->limit_rel = r < app::kReleaseMinSec   ? app::kReleaseMinSec
+                                   : r > app::kReleaseMaxSec ? app::kReleaseMaxSec
+                                                             : r;
             break;
         }
         case PAGE_SD_LOAD:
@@ -493,6 +513,8 @@ void Ui::Draw(const float (*eff)[app::kMaxParams],
             case PAGE_ROUTE: DrawRoute(pg.index, editing_); break;
             case PAGE_INPUT: DrawInput(editing_); break;
             case PAGE_OUT: DrawOut(editing_); break;
+            case PAGE_LIMIT: DrawLimit(editing_); break;
+            case PAGE_RELEASE: DrawRelease(editing_); break;
             case PAGE_CPU: DrawCpu(); break;
             case PAGE_SD_LOAD: DrawSd(true, editing_); break;
             case PAGE_SD_SAVE: DrawSd(false, editing_); break;
@@ -695,21 +717,60 @@ void Ui::DrawInput(bool editing)
     DrawHint(mono ? "L in -> L+R" : "L->L  R->R");
 }
 
+/** dB in 0.5 dB steps, e.g. "-3.5dB", "+6.0dB", "0.0dB". */
+static void FormatHalfDb(float db, char *buf, size_t len)
+{
+    const int halves = (int)roundf(db * 2.f);
+    const int a      = halves < 0 ? -halves : halves;
+    snprintf(buf, len, "%s%d.%ddB", halves < 0 ? "-" : (halves > 0 ? "+" : ""),
+             a / 2, (a % 2) * 5);
+}
+
+void Ui::DrawValue(const char *text)
+{
+    const FontDef *f = &Font_11x18;
+    if((int)strlen(text) * f->FontWidth > kContentW)
+        f = &Font_7x10;
+    disp_->SetCursor(0, f == &Font_11x18 ? 8 : 12);
+    disp_->WriteString(text, *f, true);
+}
+
 void Ui::DrawOut(bool editing)
 {
     DrawHeader("OUT", editing, nullptr);
-    const float g      = settings_->out_gain;
-    const int   halves = g > 0.f ? (int)roundf(20.f * log10f(g) * 2.f) : (int)(kOutMinDb * 2.f);
-    const int   a      = halves < 0 ? -halves : halves;
+    const float g  = settings_->out_gain;
+    const float db = g > 0.f ? 20.f * log10f(g) : kOutMinDb;
     char        buf[24];
-    snprintf(buf, sizeof(buf), "%s%d.%ddB", halves < 0 ? "-" : (halves > 0 ? "+" : ""),
-             a / 2, (a % 2) * 5);
-    const FontDef *f = &Font_11x18;
-    if((int)strlen(buf) * f->FontWidth > kContentW)
-        f = &Font_7x10;
-    disp_->SetCursor(0, f == &Font_11x18 ? 8 : 12);
-    disp_->WriteString(buf, *f, true);
-    DrawHint(halves == 0 ? "unity" : "output level");
+    FormatHalfDb(db, buf, sizeof(buf));
+    DrawValue(buf);
+    DrawHint(buf[0] == '0' ? "unity" : "output level");
+}
+
+void Ui::DrawLimit(bool editing)
+{
+    // Ceiling, plus the live gain reduction ("ON" tag while limiting)
+    const bool limiting = limiter_gr_ < -0.25f;
+    DrawHeader("LIMIT", editing, limiting ? "ON" : nullptr);
+    char buf[24];
+    FormatHalfDb(settings_->limit_db, buf, sizeof(buf));
+    DrawValue(buf);
+    // gain reduction in tenths of a dB, e.g. "GR -3.4 DB"
+    const int t = (int)(-limiter_gr_ * 10.f + 0.5f);
+    snprintf(buf, sizeof(buf), t > 0 ? "GR -%d.%d DB" : "GR %d.%d DB", t / 10, t % 10);
+    DrawHint(buf);
+}
+
+void Ui::DrawRelease(bool editing)
+{
+    DrawHeader("LIM REL", editing, nullptr);
+    const int ms = (int)(settings_->limit_rel * 1000.f + 0.5f);
+    char      buf[24];
+    if(ms < 1000)
+        snprintf(buf, sizeof(buf), "%dms", ms);
+    else
+        snprintf(buf, sizeof(buf), "%d.%02ds", ms / 1000, (ms % 1000) / 10);
+    DrawValue(buf);
+    DrawHint("limiter release");
 }
 
 void Ui::DrawCpu()

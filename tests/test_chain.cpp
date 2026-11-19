@@ -138,11 +138,14 @@ TEST(chain_registry_matches_test_list)
 TEST(settings_layout_is_stable)
 {
     // Persisted in flash: changing it needs a version bump + migration
-    CHECK(sizeof(Settings) == 164);
+    CHECK(sizeof(Settings) == 172);
     CHECK(offsetof(Settings, out_gain) == 8);
     CHECK(offsetof(Settings, slot) == 12);
     CHECK(sizeof(SlotState) == 36);
     CHECK(offsetof(Settings, route) == 156);
+    CHECK(offsetof(Settings, limit_db) == 164);
+    CHECK(offsetof(Settings, limit_rel) == 168);
+    CHECK(kSettingsVersion == 0xB10E0004);
 }
 
 TEST(settings_defaults)
@@ -157,6 +160,7 @@ TEST(settings_defaults)
     CHECK(s.route[SRC_CV_1].Is(0, fx::Reverb::DECAY));
     CHECK(s.route[SRC_CV_2].Is(0, fx::Reverb::HI_CUT));
     CHECK(s.out_gain == 1.f);
+    CHECK(s.limit_db == -1.f && s.limit_rel == 0.15f);
 }
 
 TEST(settings_validation_rejects_bad_data)
@@ -190,6 +194,14 @@ TEST(settings_validation_rejects_bad_data)
     CHECK(!Valid(b));
     b            = s;
     b.input_mode = 9;
+    CHECK(!Valid(b));    b          = s;
+    b.limit_db = 3.f; // above 0 dBFS
+    CHECK(!Valid(b));
+    b           = s;
+    b.limit_rel = NAN;
+    CHECK(!Valid(b));
+    b           = s;
+    b.limit_rel = 0.f;
     CHECK(!Valid(b));
 }
 
@@ -243,6 +255,40 @@ TEST(settings_migrate_v2)
     bad                     = v2;
     bad.fx[fx::FX_DELAY].route[0] = 6; // delay has 6 params (0..5)
     CHECK(!MigrateV2(bad, out, nullptr));
+}
+
+TEST(settings_migrate_v3)
+{
+    // A phase 1/2 chain setup keeps everything; the limiter gets defaults
+    Recall rc;
+    rc.Clear();
+    Settings cur = MakeDefaults();
+    SetSlotType(cur, rc, 1, fx::FX_DELAY);
+    SetSlotType(cur, rc, 2, fx::FX_REVERB);
+    cur.slot[1].flags = SLOT_BYPASS;
+    cur.slot[2].norm[0] = 0.77f;
+    cur.route[SRC_KNOB_2] = {1, 2};
+    cur.input_mode = INPUT_MONO;
+    cur.out_gain   = 0.5f;
+    cur.ui_slot    = 2;
+
+    SettingsV3 v3;
+    std::memcpy(&v3, &cur, sizeof(v3)); // the v3 bytes are the v4 prefix
+    v3.version = kSettingsVersionV3;
+    Settings out;
+    CHECK(MigrateV3(v3, out));
+    CHECK(Valid(out));
+    CHECK(out.version == kSettingsVersion);
+    CHECK(std::memcmp(out.slot, cur.slot, sizeof(cur.slot)) == 0);
+    CHECK(std::memcmp(out.route, cur.route, sizeof(cur.route)) == 0);
+    CHECK(out.input_mode == INPUT_MONO && out.out_gain == 0.5f && out.ui_slot == 2);
+    CHECK(out.limit_db == kLimitDefaultDb && out.limit_rel == kReleaseDefault);
+
+    v3.version = kSettingsVersionV2;
+    CHECK(!MigrateV3(v3, out));
+    v3.version = kSettingsVersionV3;
+    v3.slot[0].norm[0] = 2.f; // corrupt
+    CHECK(!MigrateV3(v3, out));
 }
 
 TEST(settings_migrate_v1)

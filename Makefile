@@ -10,6 +10,7 @@ CPP_SOURCES = \
 	src/fx/registry.cpp \
 	src/app/chain.cpp \
 	src/app/chain_settings.cpp \
+	src/app/limiter.cpp \
 	src/app/preset_text.cpp \
 	src/app/preset_store.cpp
 

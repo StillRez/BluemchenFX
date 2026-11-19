@@ -1,5 +1,6 @@
 #include "app/chain_settings.h"
 #include <cmath>
+#include <cstddef>
 
 namespace app
 {
@@ -39,6 +40,8 @@ Settings MakeDefaults()
     s.input_mode = INPUT_STEREO;
     s.topology   = 0;
     s.out_gain   = 1.f;
+    s.limit_db   = kLimitDefaultDb;
+    s.limit_rel  = kReleaseDefault;
     for(size_t k = 0; k < kNumSlots; k++)
     {
         s.slot[k].type  = fx::FX_NONE;
@@ -65,7 +68,9 @@ bool Valid(const Settings &s)
 {
     if(s.version != kSettingsVersion || s.input_mode >= INPUT_MODE_LAST
        || s.topology != 0 || s.ui_slot >= kNumSlots
-       || !(s.out_gain >= 0.f && s.out_gain <= 4.f))
+       || !(s.out_gain >= 0.f && s.out_gain <= 4.f)
+       || !(s.limit_db >= kLimitMinDb && s.limit_db <= kLimitMaxDb)
+       || !(s.limit_rel >= kReleaseMinSec * 0.99f && s.limit_rel <= kReleaseMaxSec * 1.01f))
         return false;
     for(size_t k = 0; k < kNumSlots; k++)
     {
@@ -123,6 +128,23 @@ bool MigrateV2(const SettingsV2 &v2, Settings &out, Recall *recall)
             recall->valid[0][e] = true;
         }
     }
+    return true;
+}
+
+// v4 is v3 with the limiter fields appended (MigrateV3 copies the prefix)
+static_assert(offsetof(Settings, route) == offsetof(SettingsV3, route), "v3 prefix");
+static_assert(offsetof(Settings, limit_db) == sizeof(SettingsV3), "v4 appends");
+
+bool MigrateV3(const SettingsV3 &v3, Settings &out)
+{
+    if(v3.version != kSettingsVersionV3)
+        return false;
+    Settings s = MakeDefaults(); // limiter defaults
+    std::memcpy(&s, &v3, sizeof(v3)); // v4 = v3 + limiter fields at the end
+    s.version = kSettingsVersion;
+    if(!Valid(s))
+        return false;
+    out = s;
     return true;
 }
 

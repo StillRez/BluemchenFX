@@ -12,7 +12,9 @@
  *               parameter (TYPE if empty), afterwards the page last used.
  *               Replacing an effect asks for a confirmation click.
  * SETUP pages   K1 / K2 / CV1 / CV2 routing (to any slot's parameter),
- *               INPUT, OUT level, CPU, LOAD SD, SAVE SD, SAVE.
+ *               INPUT, OUT level, LIMIT (output limiter ceiling, shows the
+ *               gain reduction), LIM REL (its release), CPU, LOAD SD,
+ *               SAVE SD, SAVE.
  *
  * On slot and setup pages: turn = next/previous page, click = edit
  * (header inverts; turn changes the value, click again leaves edit mode),
@@ -79,6 +81,8 @@ class Ui
         cpu_avg_  = avg;
         cpu_peak_ = peak;
     }
+    /** Output limiter gain reduction in dB (<= 0), for the LIMIT page. */
+    void SetLimiterGr(float db) { limiter_gr_ = db; }
     /** True once after the user asked to reset the CPU peak. */
     bool TakeCpuReset();
     /** Immediately draw a full-screen message (for blocking operations). */
@@ -108,6 +112,8 @@ class Ui
         PAGE_ROUTE,
         PAGE_INPUT,
         PAGE_OUT,
+        PAGE_LIMIT,
+        PAGE_RELEASE,
         PAGE_CPU,
         PAGE_SD_LOAD,
         PAGE_SD_SAVE,
@@ -148,6 +154,10 @@ class Ui
     void DrawRoute(size_t src, bool editing);
     void DrawInput(bool editing);
     void DrawOut(bool editing);
+    void DrawLimit(bool editing);
+    void DrawRelease(bool editing);
+    /** Value line in the big font if it fits, else the medium one. */
+    void DrawValue(const char *text);
     void DrawCpu();
     void DrawSd(bool load, bool editing);
     void DrawSave();
@@ -201,6 +211,7 @@ class Ui
     bool  cpu_reset_     = false;
     float cpu_avg_       = 0.f;
     float cpu_peak_      = 0.f;
+    float limiter_gr_    = 0.f;
     int   edited_slot_   = -1;
     int   edited_param_  = -1;
     bool  route_changed_ = false;

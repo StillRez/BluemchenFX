@@ -17,6 +17,8 @@
  *   LOAD SD / SAVE SD presets as text files on the microSD card
  *                     (0:/BLUEMCHN/PRESET01.TXT .. PRESET99.TXT), slot 1
  *   MIDI Program Chg  0..98 loads SD preset 1..99
+ *   Output            OUT level, then an always-on soft limiter (SETUP:
+ *                     LIMIT ceiling, LIM REL release; app/limiter.h)
  */
 #include "daisy_seed.h"
 #include "per/qspi.h"
@@ -30,6 +32,7 @@
 #include "app/chain.h"
 #include "app/chain_settings.h"
 #include "app/preset_store.h"
+#include "app/limiter.h"
 
 #include <cmath>
 #include <cstdio>
@@ -62,6 +65,7 @@ static Hardware hw;
 static ui::Ui   gui;
 static app::Chain chain;
 static app::Recall recall; // per slot + type: last parameters (RAM only)
+static app::Limiter limiter; // always on, after OUT (SETUP: LIMIT, LIM REL)
 
 static PersistentStorage<app::Settings> storage(hw.seed.qspi);
 static app::Settings                   *settings = nullptr;
@@ -153,6 +157,7 @@ static void AudioCallback(AudioHandle::InputBuffer  in,
             out[0][i] *= gain;
             out[1][i] *= gain;
         }
+    limiter.Process(out[0], out[1], size);
 
     meter_in  = PeakFollow(meter_in, in[0], size);
     meter_out = PeakFollow(meter_out, out[0], size);
@@ -160,8 +165,8 @@ static void AudioCallback(AudioHandle::InputBuffer  in,
 }
 
 // ----------------------------------------------------------- settings
-/** Earlier firmware stored v1 (<= 0.3.0) or v2 (0.4-0.5) settings in the
- *  same flash sector. If that's what's there, convert it so the user keeps
+/** Earlier firmware stored v1 (<= 0.3.0), v2 (0.4-0.5) or v3 (chain
+ *  without limiter) settings in the same flash sector. If that's what's there, convert it so the user keeps
  *  their setup (the active effect lands in slot 1). Run before
  *  storage.Init(). */
 static bool ReadLegacySettings(app::Settings &out)
@@ -175,6 +180,12 @@ static bool ReadLegacySettings(app::Settings &out)
     std::memcpy(&version, raw + sizeof(State), sizeof(version));
     if(state != State::FACTORY && state != State::USER)
         return false;
+    if(version == app::kSettingsVersionV3)
+    {
+        app::SettingsV3 v3;
+        std::memcpy(&v3, raw + sizeof(State), sizeof(v3));
+        return app::MigrateV3(v3, out);
+    }
     if(version == app::kSettingsVersionV2)
     {
         app::SettingsV2 v2;
@@ -253,6 +264,17 @@ static void UpdateKnobs(uint32_t now)
             }
         }
     }
+}
+
+/** Limiter parameters from the settings (only when they change: the
+ *  conversions use powf/expf). */
+static void SyncLimiter()
+{
+    static float db = 1e9f, rel = -1.f;
+    if(settings->limit_db != db)
+        limiter.SetCeilingDb(db = settings->limit_db);
+    if(settings->limit_rel != rel)
+        limiter.SetRelease(rel = settings->limit_rel);
 }
 
 /** Makes the chain engine follow the settings: effect types (click-free
@@ -424,6 +446,7 @@ int main(void)
     for(size_t k = 0; k < app::kNumSlots; k++)
         arenas[k].Init(arena_mem[k], kSlotArenaBytes);
     chain.Init(hw.SampleRate(), arenas);
+    limiter.Init(hw.SampleRate());
     recall.Clear();
     Diag("2 CHAIN OK");
 
@@ -452,6 +475,7 @@ int main(void)
     // Build the chain's effects from the stored settings (audio isn't
     // running yet, so every slot swaps immediately)
     SyncChain(0);
+    SyncLimiter();
     for(size_t k = 0; k < app::kNumSlots; k++)
         for(size_t i = 0; i < app::kMaxParams; i++)
             effective[k][i] = settings->slot[k].norm[i];
@@ -508,8 +532,10 @@ int main(void)
         HandleMidi(now);
         HandleSd(now);
 
-        // ---- chain: effect swaps (click-free), bypass
+        // ---- chain: effect swaps (click-free), bypass; output limiter
         SyncChain(now);
+        SyncLimiter();
+        gui.SetLimiterGr(limiter.GainReductionDb());
 
         // ---- persistence (QSPI erase/write blocks for a few ms; audio
         //      keeps running from internal flash)

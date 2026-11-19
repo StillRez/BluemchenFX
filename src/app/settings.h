@@ -40,9 +40,18 @@ struct EffectState
     uint8_t pad[4];
 };
 
-// ===================================================================== v3
-/** v3: effect chain (firmware 0.6+). */
-static constexpr uint32_t kSettingsVersion = 0xB10E0003; // bump on layout change
+// ===================================================================== v4
+/** v4: effect chain + output limiter. v3 (chain without limiter) is the
+ *  same layout without the last two fields. */
+static constexpr uint32_t kSettingsVersion = 0xB10E0004; // bump on layout change
+
+/** Output limiter ranges (SETUP: LIMIT, LIM REL). */
+static constexpr float kLimitMinDb      = -12.f;
+static constexpr float kLimitMaxDb      = 0.f;
+static constexpr float kLimitDefaultDb  = -1.f;
+static constexpr float kReleaseMinSec   = 0.02f;
+static constexpr float kReleaseMaxSec   = 1.f;
+static constexpr float kReleaseDefault  = 0.15f;
 
 /** Slot flag bits. */
 enum SlotFlags : uint8_t
@@ -83,6 +92,9 @@ struct Settings
     float     out_gain;   // linear output gain, 1 = unity
     SlotState slot[kNumSlots];
     Route     route[SRC_LAST]; // K1, K2, CV1, CV2
+    // --- v4
+    float     limit_db;    // output limiter ceiling, dBFS
+    float     limit_rel;   // output limiter release, seconds
 
     bool operator!=(const Settings &o) const
     {
@@ -91,6 +103,22 @@ struct Settings
 };
 
 // ============================================== legacy, for migration
+/** v3 layout (phase 1-2 builds, after v0.5.0): Settings without the
+ *  limiter fields. */
+static constexpr uint32_t kSettingsVersionV3 = 0xB10E0003;
+struct SettingsV3
+{
+    uint32_t  version;
+    uint8_t   input_mode;
+    uint8_t   topology;
+    uint8_t   ui_slot;
+    uint8_t   pad;
+    float     out_gain;
+    SlotState slot[kNumSlots];
+    Route     route[SRC_LAST];
+};
+static_assert(sizeof(SettingsV3) == 164, "v3 layout must not change");
+
 /** v2 layout (firmware 0.4.x-0.5.x): one active effect out of up to 4,
  *  each with its own params and routing. */
 static constexpr uint32_t kSettingsVersionV2 = 0xB10E0002;
