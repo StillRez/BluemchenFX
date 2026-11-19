@@ -5,7 +5,8 @@ Effect firmware for the **kxmx Bluemchen** (4HP Eurorack, Daisy Seed). Owner: St
 **StillRez**, never by legal name. Commit author: `StillRez`. **MIT licensed, meant to be fully open source.** It links
 DaisySP-LGPL (`ReverbSc`, LGPL-2.1), so the README's License section explains the LGPL terms. Keep
 new third-party code MIT-compatible and credit it in that table. Design docs live in `docs/design/`
-(effect chaining: `docs/design/effect-chaining.md`). Read `DEVLOG.md` for history and the reasoning behind decisions;
+(effect chaining: `docs/design/effect-chaining.md`; how REVERB and DELAY work and where their
+DSP comes from: `docs/design/effect-algorithms.md`, keep it current when an effect's DSP changes). Read `DEVLOG.md` for history and the reasoning behind decisions;
 open work is tracked in GitHub Issues.
 
 ## Hardware facts

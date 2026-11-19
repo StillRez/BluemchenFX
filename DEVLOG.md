@@ -708,6 +708,22 @@ Everything since v0.5.0 is now verified on hardware: CPU meter + host tests (pha
 engine + settings v3 (phase 1, except MIDI CC, still pending a check of the MIDI input),
 chain UI (phase 2), limiter + settings v4. Ready to release as **v0.6.0**.
 
+## 2026-11-19 — Effect algorithm documentation
+
+New `docs/design/effect-algorithms.md`: how REVERB and DELAY work, traced through the pinned
+DaisySP / DaisySP-LGPL code, and where each piece comes from (Costello 1999 Csound instrument →
+Varga's Csound opcode → Soundpipe → DaisySP-LGPL for ReverbSc; stmlib for OnePole and SoftClip;
+Simper's SVF; the rest is BluemchenFX's own code). Covers the waveguide-junction feedback matrix,
+the per-line random delay modulation, the RT60 → feedback mapping and why long decays measure
+short, the delay's in-loop filtering, saturation, ping-pong matrix and TIME glide. CLAUDE.md
+points to it.
+
+Found while reading ReverbSc: the DaisySP port spaces its eight lines by their size in bytes
+while indexing a float array, so the tank reserves ~396 KB but uses ~99 KB at 48 kHz. It's
+harmless at 48 kHz, so nothing changed.
+
+Docs only: no firmware change, `prebuilt/` unchanged, nothing to verify on hardware.
+
 ---
 
 ## Open items
