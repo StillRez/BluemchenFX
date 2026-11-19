@@ -549,6 +549,5 @@ Tracked as GitHub Issues:
 - *(no issue yet)* MIDI CC not yet re-tested since the chain engine (Phase 1). StillRez is
   checking the module's MIDI input hardware first.
 - *(no issue yet)* Chain engine overhead (~2 % CPU): add a fast path for steady slots.
-- *(no issue yet)* Tune each effect's default settings (`ParamSpec::def`) by ear, so loading an
-  effect into an empty slot sounds good straight away. StillRez will do this on the module.
-  Claude's session couldn't open the issue (the repo rename broke API writes from it).
+- #9 Tune each effect's default settings (`ParamSpec::def`) by ear, so loading an effect into an
+  empty slot sounds good straight away. StillRez will do this on the module.
