@@ -608,3 +608,32 @@ TEST(ui_every_screen_fits_the_display)
         r.CheckLayout("setup sd chain");
     }
 }
+
+TEST(ui_every_effect_page_fits_at_min_max_default)
+{
+    // Every effect's pages with its parameters at min, max and default:
+    // the longest value texts ("16BIT", "0.05Hz", "2.5ms", "18.0k", "10.0s")
+    for(uint8_t t = 0; t < fx::FX_COUNT; t++)
+    {
+        const fx::Effect *e = fx::Prototype(t);
+        for(int v = 0; v < 3; v++)
+        {
+            Rig r;
+            r.SetType(0, t);
+            for(size_t i = 0; i < e->NumParams(); i++)
+                r.s.slot[0].norm[i] = v == 0 ? 0.f : v == 1 ? 1.f : e->Spec(i).def;
+            r.GoHome();
+            r.Turn(-10);
+            r.CheckLayout(e->Name());
+            r.Click();
+            r.Turn(-30);
+            for(size_t p = 0; p < e->NumParams() + 4; p++)
+            {
+                char where[48];
+                snprintf(where, sizeof(where), "%s page %zu (%s)", e->Name(), p, v == 0 ? "min" : v == 1 ? "max" : "def");
+                r.CheckLayout(where);
+                r.Turn(1);
+            }
+        }
+    }
+}

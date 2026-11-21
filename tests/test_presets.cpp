@@ -50,7 +50,11 @@ bool ReadFile(const char *path, std::string &out)
  *  are written with 2 decimals, everything else as integers. */
 float Resolution(const fx::ParamSpec &s)
 {
-    return s.unit == fx::Unit::Seconds ? 0.005f : 0.5f;
+    // what the text format keeps: 2 decimals for seconds and for Hz below 10,
+    // 1 decimal for ms below 10, whole numbers otherwise
+    if(s.unit == fx::Unit::Seconds || (s.unit == fx::Unit::Hertz && s.max < 10.f))
+        return 0.005f;
+    return 0.5f;
 }
 
 struct Rng

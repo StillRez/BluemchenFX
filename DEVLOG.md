@@ -811,6 +811,70 @@ StillRez flashed the phase 3 build:
 Still to confirm on the module: MIDI CCs for slots 2–4 (CC 28–51), bypass CCs 52–55, Program
 Change loading a chain preset, and old presets 01–09 still loading into slot 1.
 
+## 2026-11-21 — Three new effects: CRUSH, CHORUS, RESON
+
+StillRez wants more effect types before finishing the phase 3 MIDI checks. Added a bit crusher,
+a chorus and a resonator. Details and sources: `docs/design/effect-algorithms.md`.
+
+**CRUSH** (`src/fx/crush.*`): BITS 1–16 (continuous), RATE 100 Hz–48 kHz (free-running
+sample & hold, any rate), DRIVE 0–+24 dB into a hard clamp, HI CUT (one-pole, off at the top of
+its range), MIX (default 100 %). No buffers.
+
+**CHORUS** (`src/fx/chorus.*`): RATE 0.05–8 Hz, DEPTH (swing up to ±95 % of DELAY), DELAY
+1–30 ms, FEEDBK 0–90 % (flanger), SPREAD (L/R LFO offset 0–180°, wide from mono), MIX. Hermite
+reads, near-sine LFO from a shaped triangle, two 4096-sample lines (32 KB) in the slot arena.
+*Caught in testing:* soft-clipping every write (as the delay does) coloured even the clean wet
+signal (full scale came out at 0.93). Only the feedback is saturated now.
+
+**RESON** (`src/fx/reson.*`): modal resonator after Mutable Instruments Rings: 16 band-pass modes
+per channel. PITCH 30 Hz–2 kHz, STRUCT (Rings' stiffness curve: harmonic at 25–30 %, bells
+above), BRIGHT (upper partials' decay), DECAY 0.05–10 s (RT60 of the fundamental), MIX.
+- Own code rather than DaisySP's `Resonator`, which recomputes all mode coefficients every
+  sample. Here they're computed once per block (ZDF SVFs, stable under modulation).
+- Each mode's gain is `1/√Q`, so broadband input comes out at about the same level at any
+  DECAY (−0.5 … +0.9 dB from 0.2 to 8 s). A held note right on a partial still rings up, into a
+  soft clip at ±2 and then the limiter.
+- The right bank flips odd partials: mono input comes out wide (L/R correlation 0.05).
+- The object is ~600 bytes, so `kEffectStorageBytes` went from 512 to 1024 (4 KB of DTCM for
+  the four slots).
+
+**Supporting changes**
+- New parameter units: `Millis`, `Bits`, and Hz below 10 shown with two decimals (`0.50Hz`), in
+  the UI and in preset files. Existing presets are written exactly as before.
+- Each effect has a 2-letter `Code()` (RV, DL, CR, CH, RS): with five effects, first letters
+  collide (CRUSH/CHORUS, REVERB/RESON). SD summaries are now `DEL>REV` (2 effects), `DL>RV>CH`
+  (3) and `DLRVCHRS` (4); before this, 3–4 effects were `D>R>R`.
+- `EffectId` appended: CRUSH = 2, CHORUS = 3, RESON = 4 (persisted ids unchanged). No settings
+  layout change; recall memory grows to 5 types (640 B).
+- Example presets 13 Lo-Fi Chorus (CRUSH → CHORUS), 14 Struck Bells (RESON → REVERB),
+  15 Jet Flanger (CHORUS as a flanger).
+
+**Host tests:** 64, all pass (13 new).
+- The three effects joined the stability suite: extremes, random settings, modulation, Reset.
+- New `tests/test_effect_behaviour.cpp` checks what they do:
+  - CRUSH: output on the BITS grid using every level; one new sample per RATE tick; 16-bit /
+    48 kHz within half a 16-bit step of the input; DRIVE and HI CUT.
+  - CHORUS: tap at DELAY to the sample (1–30 ms); DEPTH swing; SPREAD 0 vs 100 %; feedback
+    repeat ratio.
+  - RESON: rings at PITCH (55 Hz–1 kHz) and on its 3rd harmonic; fundamental RT60 = DECAY within
+    15 %; noise level; on-pitch peak; stereo width.
+  - Mutation checks: the SPREAD test fails if SPREAD is ignored, and the pitch test fails with
+    the resonator 3 % out of tune.
+- New UI test renders every page of every effect at min/max/default: all fit, checked on a
+  contact sheet too. Effect names/codes are tested unique.
+
+*Status: host-tested. Firmware compiled by CI (this session has no ARM toolchain);
+`prebuilt/` not updated. **Not yet run on hardware.** To check on the module:*
+1. *TYPE lists CRUSH, CHORUS, RESON; each loads into a slot without clicks and sounds right.*
+2. *CRUSH: BITS down to 1–4 gets gritty and quiet parts drop out; RATE down gives aliasing;
+   HI CUT softens it.*
+3. *CHORUS: default is a gentle stereo chorus; short DELAY + FEEDBK flanges (try preset 15);
+   SPREAD 0 = mono, 100 = widest.*
+4. *RESON: feed it drums or plucks. PITCH tunes it; STRUCT 27 % is string-like, higher gets
+   bell-like; DECAY sets the ring; BRIGHT darkens. Knob 1 / CV 1 on PITCH.*
+5. *Presets 13–15 load and show `CRU>CHO`, `RES>REV`, `CHORUS`.*
+6. *CPU page, each effect alone in slot 1, and RESON × 4 if you like (fills the cost table).*
+
 ---
 
 ## Open items
@@ -826,7 +890,10 @@ Tracked as GitHub Issues:
 - ~~#8 UI tweaks: HOME page crowding~~ (done: phase 2 chain HOME, small text in capitals)
 - ~~#10 Output limiter for stacked-effect peaking~~ (done)
 - ~~MIDI CC re-test since the chain engine~~ (done: works with the input jumpered for TRS-A)
-- ~~Chain engine overhead (~2 % CPU): fast path for steady slots~~ (done in phase 3, module
-  numbers pending)
+- ~~Chain engine overhead (~2 % CPU): fast path for steady slots~~ (done in phase 3; lower CPU
+  confirmed on the module, numbers pending)
+- *(no issue yet)* Phase 3 MIDI checks on the module: CCs for slots 2–4 (28–51), bypass CCs
+  52–55, Program Change loading a chain. StillRez will come back to these.
+- *(no issue yet)* Module CPU numbers for CRUSH, CHORUS, RESON (cost table).
 - #9 Tune each effect's default settings (`ParamSpec::def`) by ear, so loading an effect into an
   empty slot sounds good straight away. StillRez will do this on the module.

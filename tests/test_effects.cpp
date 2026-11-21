@@ -7,6 +7,9 @@
 #include "check.h"
 #include "fx/reverb.h"
 #include "fx/delay.h"
+#include "fx/crush.h"
+#include "fx/chorus.h"
+#include "fx/reson.h"
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -24,13 +27,20 @@ constexpr float  kMaxOutput = 32.f;
 
 fx::Reverb g_reverb;
 fx::Delay  g_delay;
+fx::Crush  g_crush;
+fx::Chorus g_chorus;
+fx::Reson  g_reson;
 
 struct Entry
 {
     fx::Effect *fx;
     bool        inited;
 };
-Entry g_effects[] = {{&g_reverb, false}, {&g_delay, false}};
+Entry g_effects[] = {{&g_reverb, false},
+                     {&g_delay, false},
+                     {&g_crush, false},
+                     {&g_chorus, false},
+                     {&g_reson, false}};
 
 // Each effect gets its own "SDRAM" arena, as in a chain slot
 constexpr size_t kArenaBytes = 8u << 20;

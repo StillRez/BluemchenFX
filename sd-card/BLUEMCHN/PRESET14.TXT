@@ -1,0 +1,41 @@
+# BluemchenFX chain preset
+# Edit with any text editor. '#' starts a comment.
+# Lines you delete keep the module's current value;
+# a [slotN] section you delete empties that slot.
+
+name        = Struck Bells
+# input: stereo | mono (mono = left input feeds both channels)
+input       = stereo
+out         = -3.0       # output level, -24.0 .. 6.0 dB
+
+[slot1]
+effect      = RESON
+bypass      = off
+bypass_mode = trails     # trails | hard
+pitch       = 220        # 30 .. 2000 Hz
+struct      = 75         # 0 .. 100 %
+bright      = 70         # 0 .. 100 %
+decay       = 3.00       # 0.05 .. 10.00 s
+mix         = 70         # 0 .. 100 %
+
+[slot2]
+effect      = REVERB
+bypass      = off
+bypass_mode = trails     # trails | hard
+decay       = 3.00       # 0.20 .. 30.00 s
+mix         = 30         # 0 .. 100 %
+lo_cut      = 36         # 20 .. 1000 Hz
+hi_cut      = 6143       # 500 .. 18000 Hz
+
+[slot3]
+effect      = none
+
+[slot4]
+effect      = none
+
+# routing: none | <slot>.<param>, e.g. 1.time or 2.decay
+# knobs set the value directly, CV adds +-5V = +-full range
+knob1       = 1.pitch
+knob2       = 1.struct
+cv1         = 1.pitch
+cv2         = 1.decay

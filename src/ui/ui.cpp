@@ -870,7 +870,12 @@ void Ui::FormatValue(const fx::Effect &e, size_t idx, float norm, char *buf, siz
             break;
         case fx::Unit::Percent: snprintf(buf, len, "%d%%", (int)(v + 0.5f)); break;
         case fx::Unit::Hertz:
-            if(v < 1000.f)
+            if(v < 10.f)
+            {
+                int c = (int)(v * 100.f + 0.5f);
+                snprintf(buf, len, "%d.%02dHz", c / 100, c % 100);
+            }
+            else if(v < 1000.f)
                 snprintf(buf, len, "%dHz", (int)(v + 0.5f));
             else
             {
@@ -878,6 +883,16 @@ void Ui::FormatValue(const fx::Effect &e, size_t idx, float norm, char *buf, siz
                 snprintf(buf, len, "%d.%dk", d / 10, d % 10);
             }
             break;
+        case fx::Unit::Millis:
+            if(v < 10.f)
+            {
+                int d = (int)(v * 10.f + 0.5f);
+                snprintf(buf, len, "%d.%dms", d / 10, d % 10);
+            }
+            else
+                snprintf(buf, len, "%dms", (int)(v + 0.5f));
+            break;
+        case fx::Unit::Bits: snprintf(buf, len, "%dBIT", (int)(v + 0.5f)); break;
     }
 }
 

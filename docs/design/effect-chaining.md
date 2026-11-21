@@ -141,6 +141,9 @@ At 48 kHz with 32-sample blocks, the callback has **667 µs** per block.
   | DELAY | **5 % / 5 %** (2026-11-18) | 5.9 |
   | DELAY in slot 1 of the phase-1 chain engine | **7 % / 8 %** (2026-11-18) | – |
   | DELAY → REVERB → REVERB → REVERB (phase 2) | **≈ 55 % / 66 %** (2026-11-18) | – |
+  | CRUSH | *pending* | 0.3 |
+  | CHORUS | *pending* | 4–10 |
+  | RESON (16 modes × 2 channels) | *pending* | 1.6–1.9 |
 
   The host column has them in the *opposite* order: on the STM32 the reverb's eight
   interpolated delay lines in SDRAM (cache misses) dominate, while on a PC everything sits in

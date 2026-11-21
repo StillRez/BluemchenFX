@@ -83,7 +83,7 @@ slots keep playing. Saved settings from earlier versions move into slot 1 automa
 | Encoder hold (0.7 s) | HOME: store all settings to flash ("SAVED"). Elsewhere: **back to HOME** (also cancels an edit) |
 | Knob 1 / Knob 2 | Absolute control of the routed parameter, in any slot (defaults: reverb **Decay** / **Mix**, delay **Time** / **Mix**). A knob only takes over once you move it, so stored values aren't overwritten at power-up |
 | CV 1 / CV 2 | Bipolar offset on the routed parameter, ±5 V = ±full range (defaults: reverb **Decay** / **Hi Cut**, delay **Time** / **Feedback**) |
-| MIDI CC 20–51 | Parameters of every slot, in page order: CC = 20 + 8 × (slot − 1) + parameter number (from 0). Slot 1 = CC 20–27, slot 2 = 28–35, slot 3 = 36–43, slot 4 = 44–51 (reverb: Decay, Mix, Lo Cut, Hi Cut; delay: Time, Feedback, Mix, Ping, Lo Cut, Hi Cut). Any channel |
+| MIDI CC 20–51 | Parameters of every slot, in page order: CC = 20 + 8 × (slot − 1) + parameter number (from 0). Slot 1 = CC 20–27, slot 2 = 28–35, slot 3 = 36–43, slot 4 = 44–51 (the order of the tables below, e.g. reverb: Decay, Mix, Lo Cut, Hi Cut). Any channel |
 | MIDI CC 52–55 | Bypass slots 1–4: value 64–127 = bypassed, 0–63 = on (in the slot's bypass mode) |
 | MIDI Program Change 0–98 | Load SD preset 1–99 |
 
@@ -153,6 +153,51 @@ the page you were on last.
 | LO CUT | 20 Hz … 1 kHz | 6 dB/oct high-pass in the feedback loop: each repeat gets thinner |
 | HI CUT | 500 Hz … 18 kHz | 6 dB/oct low-pass in the feedback loop: each repeat gets darker |
 
+### Crush parameters (bit crusher)
+
+| Page | Range | What it does |
+|---|---|---|
+| BITS | 1 … 16 bit | Bit depth. Continuous, so turning it sweeps smoothly; at low depths quiet sounds drop out, as on real low-bit converters |
+| RATE | 100 Hz … 48 kHz | Sample-and-hold rate, exponential. Any rate, not just divisions of 48 kHz; the aliasing is the point. 48 kHz = off |
+| DRIVE | 0 … 100 % | Gain into the crusher, up to +24 dB, clipped hard at full scale |
+| HI CUT | 500 Hz … 18 kHz | 6 dB/oct low-pass after the crusher, to tame the aliasing. All the way up = off |
+| MIX | 0 … 100 % | Equal-power dry/wet crossfade (default 100 %) |
+
+### Chorus parameters
+
+| Page | Range | What it does |
+|---|---|---|
+| RATE | 0.05 … 8 Hz | LFO speed, exponential |
+| DEPTH | 0 … 100 % | How far the delay swings: up to ±95 % of DELAY |
+| DELAY | 1 … 30 ms | Centre delay. Short + FEEDBK = flanger; 10–25 ms = chorus |
+| FEEDBK | 0 … 90 % | Feedback for flanging; soft-clipped |
+| SPREAD | 0 … 100 % | Phase offset between the left and right LFO, 0 … 180°: wide stereo even from a mono input |
+| MIX | 0 … 100 % | Equal-power dry/wet crossfade. 100 % = pure vibrato |
+
+### Reson parameters (modal resonator)
+
+The input excites a bank of 16 tuned resonant modes per channel, like striking a string, bar or
+bell (modelled on Mutable Instruments Rings' resonator). Drums, plucks and noise bring it to life;
+a held note on the pitch rings up strongly (the output limiter catches it).
+
+| Page | Range | What it does |
+|---|---|---|
+| PITCH | 30 Hz … 2 kHz | Fundamental, exponential. CV covers ~6 octaves over ±5 V (not 1 V/oct) |
+| STRUCT | 0 … 100 % | Partial spacing: 25–30 % harmonic (string); lower squeezes them, higher stretches them into bars and bells |
+| BRIGHT | 0 … 100 % | How long the upper partials ring compared with the fundamental: low = dark and soft |
+| DECAY | 0.05 … 10 s | Ring time (RT60) of the fundamental |
+| MIX | 0 … 100 % | Equal-power dry/wet crossfade |
+
+Knob and CV routing when an effect is loaded into a slot they point at:
+
+| Effect | Knob 1 | Knob 2 | CV 1 | CV 2 |
+|---|---|---|---|---|
+| REVERB | DECAY | MIX | DECAY | HI CUT |
+| DELAY | TIME | MIX | TIME | FEEDBK |
+| CRUSH | BITS | RATE | RATE | BITS |
+| CHORUS | RATE | DEPTH | DEPTH | RATE |
+| RESON | PITCH | DECAY | PITCH | STRUCT |
+
 On parameter pages the big number is the live value, the bar below shows it graphically, and a
 small tick above the bar marks the stored value (they differ while CV is modulating). Tags in the
 header (`K1`, `C2`…) show which sources are routed to that parameter. The two 1‑pixel columns at
@@ -169,7 +214,7 @@ BLUEMCHN/PRESET01.TXT … PRESET99.TXT
 A preset is the **whole chain**: all four slots (effect, bypass, parameters), the knob/CV
 routing, the input mode and the OUT level. The limiter settings are not part of presets.
 The LOAD SD / SAVE SD pages show the slot number, what a used slot holds (`REVERB`, `DEL>REV`
-for two effects, `D>R>R>R` for three or four), `EMPTY` (or `NO CARD`), and the preset's name.
+for two effects, `DL>RV>CH` for three, `DLRVCHRS` for four, using the codes RV, DL, CR, CH, RS), `EMPTY` (or `NO CARD`), and the preset's name.
 The card is never touched at boot; it's mounted the first time you open
 an SD page (the screen shows `SD...` while that happens, and audio keeps running). It can be
 inserted or swapped at any time. Saving to a slot that already has a name keeps that name; new
@@ -200,6 +245,9 @@ of the card:
 | 10 | Delay → Reverb | Dub Space |
 | 11 | Reverb → Delay | Room Echo |
 | 12 | Delay → Reverb → Reverb (bypassed) | Infinite Wash |
+| 13 | Crush → Chorus | Lo-Fi Chorus |
+| 14 | Reson → Reverb | Struck Bells (feed it drums or plucks) |
+| 15 | Chorus (as a flanger) | Jet Flanger |
 
 ### Chain file format
 
@@ -211,7 +259,7 @@ input       = stereo
 out         = 0.0      # output level in dB, -24.0 .. 6.0
 
 [slot1]
-effect      = DELAY    # REVERB | DELAY | none
+effect      = DELAY    # REVERB | DELAY | CRUSH | CHORUS | RESON | none
 bypass      = off      # on | off
 bypass_mode = trails   # trails | hard
 time        = 0.37
@@ -252,7 +300,7 @@ emptied.
 ```
 # '#' or ';' starts a comment (also at the end of a line)
 name   = Big Hall      # up to 16 characters, shown on the OLED
-effect = REVERB        # REVERB | DELAY (which effect the lines below are for)
+effect = REVERB        # any effect name (which effect the lines below are for)
 input  = stereo        # stereo | mono
 decay  = 4.50          # seconds, 0.20 .. 30.00
 mix    = 40            # percent, 0 .. 100
@@ -284,6 +332,9 @@ src/
   fx/registry.*       the effect list: ids (persisted), metadata prototypes, construction
   fx/reverb.*         ReverbSc + SVF lo-cut + equal-power mix
   fx/delay.*          stereo delay: SDRAM delay lines, one-pole loop filters, ping-pong
+  fx/crush.*          bit crusher / sample-rate reducer
+  fx/chorus.*         stereo chorus / flanger (SDRAM delay lines, Hermite reads)
+  fx/reson.*          modal resonator (16 ZDF band-pass modes per channel, after Rings)
   ui/ui.*             menus (HOME chain overview, slot pages, SETUP) and OLED drawing
   app/settings.h      persisted settings v3: chain slots, routing (QSPI, last 4 KB sector)
   app/chain.*         chain engine: 4 serial slots, click-free bypass / effect swaps
@@ -301,7 +352,8 @@ MSYS2). CI runs them on every push and won't build firmware if they fail.
 
 ### Adding another effect
 
-Implement `fx::Effect`: list your parameters in a `ParamSpec` table, handle them in `SetParam`,
+Implement `fx::Effect`: give it a `Name()` (up to 7 characters, first 3 letters unique) and a
+unique 2-letter `Code()` for chain summaries, list your parameters in a `ParamSpec` table, handle them in `SetParam`,
 process audio in `Process`, clear buffers in `Reset`, and say which parameters the knobs/CVs
 should control by default in `DefaultRoute`. Take big buffers from the arena passed to
 `Init(sample_rate, arena)` and keep no global state: a chain can hold several copies of the
@@ -309,7 +361,8 @@ same effect. Then **append** it to `EffectId` and the tables in `src/fx/registry
 reorder: the id is saved in flash). The TYPE page, parameter pages, knob/CV routing, MIDI CCs,
 presets and flash storage all follow from the parameter table (up to 8 parameters). Also add it
 to the lists in `tests/test_effects.cpp` and `tests/test_chain.cpp`, so CI checks it for
-stability (a test fails if you forget).
+stability (a test fails if you forget), and add tests for what it should do (see
+`tests/test_effect_behaviour.cpp`).
 
 ## License
 

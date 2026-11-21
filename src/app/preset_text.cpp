@@ -33,6 +33,8 @@ static const char *UnitSuffix(fx::Unit u)
         case fx::Unit::Seconds: return "s";
         case fx::Unit::Percent: return "%";
         case fx::Unit::Hertz: return "Hz";
+        case fx::Unit::Millis: return "ms";
+        case fx::Unit::Bits: return "bits";
     }
     return "";
 }
@@ -40,10 +42,15 @@ static const char *UnitSuffix(fx::Unit u)
 /** Number to text without %f (newlib-nano). */
 static void FormatReal(fx::Unit u, float v, char *buf, size_t cap)
 {
-    if(u == fx::Unit::Seconds)
+    if(u == fx::Unit::Seconds || (u == fx::Unit::Hertz && v < 9.995f))
     {
         int c = (int)(v * 100.f + 0.5f);
         snprintf(buf, cap, "%d.%02d", c / 100, c % 100);
+    }
+    else if(u == fx::Unit::Millis && v < 9.95f)
+    {
+        int d = (int)(v * 10.f + 0.5f);
+        snprintf(buf, cap, "%d.%d", d / 10, d % 10);
     }
     else
     {
@@ -835,14 +842,17 @@ void PresetSummary(const PresetInfo &info, char *buf, size_t cap)
         snprintf(buf, cap, "%s", e[0]->Name());
         return;
     }
-    const size_t chars = n == 2 ? 3 : 1;
-    size_t       len   = 0;
+    // two: first 3 letters of each name; three: 2-letter codes with '>';
+    // four: codes back to back (9 characters fit the SD page)
+    size_t len = 0;
     for(size_t j = 0; j < n; j++)
     {
-        if(j && len + 1 < cap)
+        if(j && n < 4 && len + 1 < cap)
             buf[len++] = '>';
-        for(size_t c = 0; c < chars && e[j]->Name()[c] && len + 1 < cap; c++)
-            buf[len++] = e[j]->Name()[c];
+        const char  *src   = n == 2 ? e[j]->Name() : e[j]->Code();
+        const size_t chars = n == 2 ? 3 : 2;
+        for(size_t c = 0; c < chars && src[c] && len + 1 < cap; c++)
+            buf[len++] = src[c];
     }
     buf[len] = 0;
 }

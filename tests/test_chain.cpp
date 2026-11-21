@@ -123,7 +123,7 @@ TEST(chain_registry_matches_test_list)
 {
     // Every registered effect must also be in test_effects.cpp's stability
     // list; this catches "added to the registry, forgot the tests".
-    const char *tested[] = {"REVERB", "DELAY"};
+    const char *tested[] = {"REVERB", "DELAY", "CRUSH", "CHORUS", "RESON"};
     for(uint8_t id = 0; id < fx::FX_COUNT; id++)
     {
         bool found = false;

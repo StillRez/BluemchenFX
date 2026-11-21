@@ -22,7 +22,9 @@ enum class Unit : uint8_t
 {
     Seconds,
     Percent,
-    Hertz,
+    Hertz,   // shown with two decimals below 10 Hz
+    Millis,  // milliseconds; one decimal below 10 ms
+    Bits,    // bit depth, shown as an integer
 };
 
 struct ParamSpec
@@ -59,6 +61,10 @@ class Effect
   public:
     virtual ~Effect() {}
     virtual const char *Name() const = 0;
+
+    /** Two-letter code for compact chain summaries ("RV", "DL"). Unique per
+     *  effect (tests/test_chain_presets.cpp checks). */
+    virtual const char *Code() const = 0;
     /** Setup: allocate buffers from `mem` (the slot's SDRAM arena) and
      *  clear them. Returns false if the arena is too small. Called from the
      *  main loop while the slot isn't being processed; the effect object

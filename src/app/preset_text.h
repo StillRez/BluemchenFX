@@ -120,7 +120,8 @@ struct PresetInfo
 PresetInfo PeekPresetText(const char *text, size_t len);
 
 /** Short text for the SD slot page: one effect -> "REVERB", two -> "DEL>REV",
- *  three or four -> "D>R>R>R", none -> "EMPTY". "" when not `known`. */
+ *  three -> "DL>RV>CH", four -> "DLRVCHRS" (2-letter codes), none -> "EMPTY".
+ *  "" when not `known`. */
 void PresetSummary(const PresetInfo &info, char *buf, size_t cap);
 
 } // namespace app

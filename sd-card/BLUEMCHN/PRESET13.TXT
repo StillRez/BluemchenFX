@@ -1,0 +1,43 @@
+# BluemchenFX chain preset
+# Edit with any text editor. '#' starts a comment.
+# Lines you delete keep the module's current value;
+# a [slotN] section you delete empties that slot.
+
+name        = Lo-Fi Chorus
+# input: stereo | mono (mono = left input feeds both channels)
+input       = stereo
+out         = 0.0        # output level, -24.0 .. 6.0 dB
+
+[slot1]
+effect      = CRUSH
+bypass      = off
+bypass_mode = trails     # trails | hard
+bits        = 6          # 1 .. 16 bits
+rate        = 9000       # 100 .. 48000 Hz
+drive       = 20         # 0 .. 100 %
+hi_cut      = 6000       # 500 .. 18000 Hz
+mix         = 70         # 0 .. 100 %
+
+[slot2]
+effect      = CHORUS
+bypass      = off
+bypass_mode = trails     # trails | hard
+rate        = 0.30       # 0.05 .. 8.00 Hz
+depth       = 40         # 0 .. 100 %
+delay       = 15         # 1.0 .. 30 ms
+feedbk      = 0          # 0 .. 90 %
+spread      = 80         # 0 .. 100 %
+mix         = 50         # 0 .. 100 %
+
+[slot3]
+effect      = none
+
+[slot4]
+effect      = none
+
+# routing: none | <slot>.<param>, e.g. 1.time or 2.decay
+# knobs set the value directly, CV adds +-5V = +-full range
+knob1       = 1.bits
+knob2       = 1.rate
+cv1         = 1.rate
+cv2         = 2.depth

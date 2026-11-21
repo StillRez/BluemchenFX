@@ -27,6 +27,7 @@ class Reverb : public Effect
     };
 
     const char *Name() const override { return "REVERB"; }
+    const char *Code() const override { return "RV"; }
     bool        Init(float sample_rate, Arena &mem) override;
     void        Reset() override;
 

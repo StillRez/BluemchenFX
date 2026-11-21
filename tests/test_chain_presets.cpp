@@ -46,7 +46,11 @@ bool ReadFile(const char *path, std::string &out)
 
 float Resolution(const fx::ParamSpec &s)
 {
-    return s.unit == fx::Unit::Seconds ? 0.005f : 0.5f;
+    // what the text format keeps: 2 decimals for seconds and for Hz below 10,
+    // 1 decimal for ms below 10, whole numbers otherwise
+    if(s.unit == fx::Unit::Seconds || (s.unit == fx::Unit::Hertz && s.max < 10.f))
+        return 0.005f;
+    return 0.5f;
 }
 
 app::Settings Load(const char *text, app::PresetLoad *res = nullptr)
@@ -340,13 +344,41 @@ TEST(chain_presets_summary_text)
     set(D, N, R, N);
     CHECK(std::strcmp(buf, "DEL>REV") == 0);
     set(D, R, R, R);
-    CHECK(std::strcmp(buf, "D>R>R>R") == 0);
+    CHECK(std::strcmp(buf, "DLRVRVRV") == 0);
+    set(D, N, R, R);
+    CHECK(std::strcmp(buf, "DL>RV>RV") == 0);
+    const uint8_t C = fx::FX_CRUSH, H = fx::FX_CHORUS, S = fx::FX_RESON;
+    set(C, H, N, N);
+    CHECK(std::strcmp(buf, "CRU>CHO") == 0);
+    set(R, S, N, N);
+    CHECK(std::strcmp(buf, "REV>RES") == 0);
+    set(C, H, S, R);
+    CHECK(std::strcmp(buf, "CRCHRSRV") == 0);
     info.known = false;
     app::PresetSummary(info, buf, sizeof(buf));
     CHECK(buf[0] == 0);
     // must fit the SD page's status area (x = 24..59, 4 px per char)
     set(D, R, D, R);
     CHECK(std::strlen(buf) <= 9);
+}
+
+TEST(effect_codes_and_names_are_unique)
+{
+    for(uint8_t a = 0; a < fx::FX_COUNT; a++)
+    {
+        const fx::Effect *ea = fx::Prototype(a);
+        CHECKF(std::strlen(ea->Code()) == 2, "%s: code must be 2 letters", ea->Name());
+        CHECKF(std::strlen(ea->Name()) <= 7, "%s: name longer than 7", ea->Name());
+        for(uint8_t b = a + 1; b < fx::FX_COUNT; b++)
+        {
+            const fx::Effect *eb = fx::Prototype(b);
+            CHECKF(std::strcmp(ea->Code(), eb->Code()) != 0, "%s / %s share a code", ea->Name(), eb->Name());
+            CHECKF(std::strncmp(ea->Name(), eb->Name(), 3) != 0,
+                   "%s / %s share their first 3 letters (2-effect summary)",
+                   ea->Name(),
+                   eb->Name());
+        }
+    }
 }
 
 TEST(midi_cc_map_reaches_every_slot)

@@ -25,6 +25,9 @@ CXXFLAGS := -std=gnu++17 -O2 -g -Wall -Wno-unused-function -MMD -MP \
 FW_SOURCES := \
 	$(SRC)/fx/reverb.cpp \
 	$(SRC)/fx/delay.cpp \
+	$(SRC)/fx/crush.cpp \
+	$(SRC)/fx/chorus.cpp \
+	$(SRC)/fx/reson.cpp \
 	$(SRC)/fx/registry.cpp \
 	$(SRC)/app/chain.cpp \
 	$(SRC)/app/chain_settings.cpp \

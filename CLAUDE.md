@@ -5,7 +5,7 @@ Effect firmware for the **kxmx Bluemchen** (4HP Eurorack, Daisy Seed). Owner: St
 **StillRez**, never by legal name. Commit author: `StillRez`. **MIT licensed, meant to be fully open source.** It links
 DaisySP-LGPL (`ReverbSc`, LGPL-2.1), so the README's License section explains the LGPL terms. Keep
 new third-party code MIT-compatible and credit it in that table. Design docs live in `docs/design/`
-(effect chaining: `docs/design/effect-chaining.md`; how REVERB and DELAY work and where their
+(effect chaining: `docs/design/effect-chaining.md`; how every effect works and where its
 DSP comes from: `docs/design/effect-algorithms.md`, keep it current when an effect's DSP changes). Read `DEVLOG.md` for history and the reasoning behind decisions;
 open work is tracked in GitHub Issues.
 
@@ -82,6 +82,9 @@ src/fx/arena.h          bump allocator over a slot's SDRAM arena (no free; Reset
 src/fx/registry.*       EffectId (persisted), prototypes (metadata), Construct/Destroy
 src/fx/reverb.*         ReverbSc (SDRAM) + SVF lo cut + equal-power mix; decay = RT60 seconds
 src/fx/delay.*          stereo delay <= 2 s (SDRAM DelayLines), OnePole loop filters, ping-pong
+src/fx/crush.*          bit crusher: drive, S&H at any rate, continuous bit depth, hi cut
+src/fx/chorus.*         stereo chorus/flanger: Hermite-read modulated tap, LFO spread, clipped feedback
+src/fx/reson.*          modal resonator: 16 ZDF band-pass modes/channel, block-rate coeffs (after Rings)
 src/ui/ui.*             menus: HOME (chain) / slot pages / SETUP; draws via OneBitGraphicsDisplay
 src/app/settings.h      persisted POD struct v4 (chain: 4 SlotStates + Route per source, limiter), legacy v1-v3
 src/app/chain.*         chain engine: serial slots, per-slot g/b ramps, click-free swap/bypass
@@ -89,23 +92,29 @@ src/app/chain_settings.* defaults, Valid(), MigrateV1/V2/V3, SetSlotType (recall
 src/app/preset_text.*   preset text format (hardware-independent, host-testable)
 src/app/preset_store.*  SD mount + slot files (FatFS)
 src/app/limiter.*       always-on output limiter (after OUT): peak env + soft clip, never past the ceiling
-sd-card/BLUEMCHN/       example presets (01-09 single effect, 10-12 chains)
-tests/                  host tests: `make -C tests run` (DSP, presets, settings, chain, UI); CI gates the build on them
+sd-card/BLUEMCHN/       example presets (01-09 single effect, 10-15 chain format)
+tests/                  host tests: `make -C tests run` (DSP stability + behaviour, presets, settings, chain, UI); CI gates the build on them
 tools/ui_shots.py       UI tests' screens -> PNG contact sheet (UI_SHOTS=dir make -C tests run ARGS=ui_)
 docs/design/            design docs (effect chaining plan, phases 0-4)
 ```
 
 ## Conventions and gotchas
 
-- **New effects** implement `fx::Effect` (incl. `Reset()` and `DefaultRoute()`) and publish a
+- **New effects** implement `fx::Effect` (incl. `Reset()`, `DefaultRoute()` and a unique 2-letter
+  `Code()` for SD chain summaries; `Name()` <= 7 chars with unique first 3 letters, tested) and publish a
   `ParamSpec` table. UI pages, knob/CV routing, MIDI CC (20 + 8·slot + n) and preset keys are generated
   from it. Max 8 params. Header names can be up to 7 chars. `Init(sr, Arena&)` takes big buffers
   from the slot's SDRAM arena (8 MB) and returns false if they don't fit. **No global/static
   state**: several instances can run at once. The object itself must fit
-  `kEffectStorageBytes` (512, static_assert in registry.cpp). Register by **appending** to
+  `kEffectStorageBytes` (1024 since RESON, static_assert in registry.cpp; 4 slots = 4 KB DTCM). Register by **appending** to
   `EffectId` and the tables in `src/fx/registry.cpp`: ids are persisted, never reorder. Presets
   refer to effects by `Name()`. Add it to `tests/test_effects.cpp` (stability) and the list in
-  `tests/test_chain.cpp` (a test fails if the registry has an effect the tests don't).
+  `tests/test_chain.cpp` (a test fails if the registry has an effect the tests don't), and
+  write behaviour tests in `tests/test_effect_behaviour.cpp` (stability alone doesn't show it does
+  what it says). Units: Seconds, Percent, Hertz (2 decimals below 10 Hz), Millis, Bits; a new
+  unit needs `FormatValue` (ui.cpp), `FormatReal`/`UnitSuffix` (preset_text.cpp) and the tests'
+  `Resolution()`. Effects at MIX 100 % leak ~4e-8 of dry (cos(pi/2) in float): harmless, but
+  exact-equality tests must allow for it.
 - **Effect defaults** (`ParamSpec::def`) are what an effect starts with in an empty slot. They
   were picked on paper; StillRez plans to tune them by ear (open item in DEVLOG).
 - **CPU load:** the CPU page shows the audio callback's average and peak load (libDaisy

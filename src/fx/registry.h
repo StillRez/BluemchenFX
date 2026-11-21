@@ -24,6 +24,9 @@ enum EffectId : uint8_t
 {
     FX_REVERB = 0,
     FX_DELAY  = 1,
+    FX_CRUSH  = 2,
+    FX_CHORUS = 3,
+    FX_RESON  = 4,
     FX_COUNT,
     FX_NONE = 0xFF, // empty slot
 };
@@ -31,7 +34,7 @@ enum EffectId : uint8_t
 /** Bytes (and alignment) of the per-slot storage that holds one effect
  *  object. Big buffers are NOT in here: they come from the arena.
  *  Checked against every effect class in registry.cpp. */
-static constexpr size_t kEffectStorageBytes = 512;
+static constexpr size_t kEffectStorageBytes = 1024;
 static constexpr size_t kEffectStorageAlign = 16;
 
 /** Metadata instance for `id` (nullptr for FX_NONE / unknown ids). */

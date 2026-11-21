@@ -1,13 +1,13 @@
-# Effect algorithms: REVERB and DELAY
+# Effect algorithms
 
-How the two effects in the current build work, down to the library code they run on, and where
+How the effects in the current build (REVERB, DELAY, CRUSH, CHORUS, RESON) work, down to the library code they run on, and where
 each piece comes from. Read against the pinned submodules: DaisySP `2c72eaf`, DaisySP-LGPL
 `c89d380`. Numbers assume the module's 48 kHz sample rate and 32-sample blocks.
 
-Both effects are verified on hardware (see DEVLOG, 2026-11-18). This document describes the code
-and changes no behaviour.
+REVERB and DELAY are verified on hardware (see DEVLOG, 2026-11-18). CRUSH, CHORUS and RESON
+were added on 2026-11-21 and are host-tested only until StillRez reports back.
 
-**Shared plumbing (both effects)**
+**Shared plumbing (all effects)**
 
 - **Parameter mapping.** Each parameter is stored normalised (0–1) and converted by
   `ParamSpec::ToReal()` (`src/fx/effect.h`). Linear curves map `min + (max − min)·n`.
@@ -215,6 +215,118 @@ Two `DelayLine<float, 96256>` (2 s at 48 kHz + 256 samples headroom), ~385 KB ea
 from the slot's SDRAM arena. CPU on the module: **5 % / 5 %** standalone, **7 % / 8 %** in
 slot 1 of the chain engine (DEVLOG, 2026-11-18).
 
+## CRUSH (`src/fx/crush.*`)
+
+All BluemchenFX code; no library DSP beyond `OnePole` and `fonepole`.
+
+### Signal path (per channel)
+
+```
+in ── × DRIVE ── clamp ±1 ── sample & hold (RATE) ── quantise (BITS) ── [Hi Cut LP] ── wet
+                                    ▲ one clock for both channels
+```
+
+- **DRIVE**: gain `10^(drive% · 0.012)`, 0 … +24 dB, then a hard clamp at ±1 (a converter's full
+  scale). Not soft-clipped on purpose: this is meant to sound digital.
+- **Sample & hold**: a phase accumulator advances by `RATE / 48000` per sample and takes a new
+  sample each time it wraps, so the rate is continuous (12 kHz holds every 4th sample, 7 kHz
+  alternates 6 and 7). Above 99.9 % of 48 kHz every sample is taken. Nothing band-limits the
+  hold: the aliasing *is* the effect. Both channels share the clock.
+- **Quantiser**: `round(x · L) / L` with `L = 2^(bits − 1)` levels per unit, a mid-tread
+  quantiser. BITS is continuous, so L moves smoothly between powers of two. At 1 bit the output
+  is −1, 0 or +1; quiet signals round to 0 and drop out (like a low-bit converter without
+  dither).
+- **Hi Cut**: 6 dB/oct `OnePole` low-pass after the crusher, to soften the aliasing. At the top
+  of its range (≥ 98 % of 18 kHz) it's skipped, so BITS 16 / RATE 48 kHz is plain 16-bit
+  quantisation (tested to within half a 16-bit step).
+- Smoothing: all parameters block-rate (`fonepole` 0.08).
+
+**Memory and cost:** no buffers (object only). Host: 0.3 µs/block, the cheapest effect.
+*Module CPU pending.*
+
+---
+
+## CHORUS (`src/fx/chorus.*`)
+
+### Signal path (per channel)
+
+```
+in ──► + ──► delay line ──(tap at DELAY ± swing·LFO, Hermite)──┬──► wet
+       ▲                                                        │
+       └──────────── soft clip ◄── × FEEDBK ◄──────────────────┘
+```
+
+- **LFO**: one phase accumulator at RATE; the right channel reads it `SPREAD · 180°` behind the
+  left. The waveform is a triangle shaped by `t · (1.5 − 0.5 t²)`, a near-sine (third harmonic
+  about −40 dB) that costs a few multiplies instead of `sinf` per sample.
+- **Tap**: `DELAY + DEPTH · 0.95 · DELAY · lfo`. The swing scales with DELAY, so the tap never
+  reaches zero delay (minimum 5 % of DELAY), and DEPTH means the same *proportion* at any DELAY.
+  DELAY and DEPTH are smoothed more slowly (`fonepole` 0.03, ~33 ms) so turning them glides
+  instead of stepping the tap.
+- **Read**: `DelayLine::ReadHermite()` (4-point, 3rd-order Hermite). A moving tap with linear
+  interpolation would dull the highs and add modulation noise.
+- **Feedback**: only the feedback is saturated (`2 · SoftClip(x/2)`), so with FEEDBK 0 the wet
+  signal is a clean delayed copy, and with feedback the loop is bounded (each pass adds at most
+  ±2). Max 90 %. Positive only; short DELAY + FEEDBK gives a flanger.
+- Tested: tap lands on DELAY (1–30 ms) to the sample, DEPTH 50 % at 10 ms swings 5.25–14.75 ms,
+  SPREAD 0 keeps L = R and 100 % puts them 180° apart, 80 % feedback repeats decay 0.8× per pass.
+
+**Memory and cost:** two `DelayLine<float, 4096>` (85 ms each, 32 KB total) from the slot's
+SDRAM arena. Host: ~4–10 µs/block (two Hermite reads per sample). *Module CPU pending.*
+
+---
+
+## RESON (`src/fx/reson.*`)
+
+A modal resonator: the input drives a bank of band-pass filters ("modes") tuned like the
+partials of a string, bar or bell. The *model* (partial spacing via a stiffness curve, Q set from
+a decay, upper partials losing Q by a constant ratio) is Émilie Gillet's resonator from Mutable
+Instruments **Rings**, as ported to DaisySP's `PhysicalModeling/resonator.*`. The code is
+BluemchenFX's own; DaisySP's `Resonator` wasn't used because it recomputes every mode's
+coefficients (`powf`, `tan`) on every sample, which is too costly for a stereo effect.
+
+### Per block (every 32 samples)
+
+1. `stiffness = Stiffness(STRUCT)`: Rings' curve. Below 25 % negative (partials squeezed), 25–30 %
+   zero (harmonic), 30–90 % rising linearly to 1, then a cosine ramp to 2 (bells).
+2. `f0 = PITCH / 48000 · c`, where `c` keeps the 3rd partial at 3 × PITCH despite the stretch
+   (Rings' `NthHarmonicCompensation(3, …)`).
+3. Partial `i` (0–15): `f_i = (i+1) · f0 · stretch_i`, where `stretch` starts at 1 and grows by
+   `stiffness` each partial, `stiffness` itself shrinking by 0.98 (0.93 if negative) each time.
+   Partials at or above 0.45 × 48 kHz are silent.
+4. **Q from DECAY**: a band-pass of quality Q at f cycles/sample decays with time constant
+   `Q / (π f)` samples, so `Q_0 = 1 + f_0 · q` with `q = DECAY · 48000 · π / 6.908` gives the
+   fundamental an RT60 of DECAY (tested within 15 %: 0.3, 1 and 3 s). Each higher partial
+   multiplies q by `q_loss = 0.15 + 0.85 · b(2 − b)` (b = BRIGHT, Rings' formula): BRIGHT 100 %
+   lets all partials ring as long as the fundamental, 0 % kills them in a few cycles.
+5. **Gain per mode** `√k = 1/√Q`, times `(1 − 2f)` near Nyquist, times `kWetScale` (1.0). With a
+   unity-peak band-pass, broadband energy through a mode falls as 1/Q; `√Q` gain restores it, so
+   **noise in ≈ noise out at any DECAY** (measured −0.5 … +0.9 dB from 0.2 to 8 s). A sustained
+   tone exactly on a partial still rises by about √Q, which is what makes it resonate.
+
+### Per sample
+
+Each mode is a zero-delay-feedback state-variable filter (Andrew Simper's form; the band-pass
+output `v1`), with `g = tan(π f)` and `a1 = 1 / (1 + g(g + k))` from the block step:
+
+```
+v1 = a1 · (s1 + g · (x − s2));   v2 = s2 + g · v1
+s1 = 2·v1 − s1;                  s2 = 2·v2 − s2
+```
+
+ZDF SVFs stay stable when their coefficients change between blocks, which matters when PITCH is
+under CV. Left and right banks share coefficients; the right bank **flips the sign of odd
+partials**, so the two sides differ in waveform but not in spectrum: a mono input comes out
+wide (L/R correlation ≈ 0.05 for noise). The sum of the modes is soft-clipped at ±2 (same
+`2·SoftClip(x/2)` as the delay) before the mix; the output limiter handles the rest.
+
+Smoothing: PITCH in octaves (`fonepole` 0.15, so CV sweeps glide evenly), the rest 0.08.
+Modes that leave the audible range have their state cleared, so turning PITCH back down doesn't
+resume an old ring.
+
+**Memory and cost:** no buffers; 16 modes × 2 channels of state (~0.6 KB, which is why
+`kEffectStorageBytes` went from 512 to 1024). Host: ~1.6–1.9 µs/block. *Module CPU pending.*
+
 ---
 
 ## Sources and licences
@@ -228,6 +340,9 @@ slot 1 of the chain engine (DEVLOG, 2026-11-18).
 | `DelayLine` | DaisySP `Utility/delayline.h` (Electrosmith) | MIT |
 | `fonepole` smoothing | DaisySP `Utility/dsp.h` | MIT |
 | Effect wrappers: RT60 mapping, send filtering, equal-power mix, delay loop, ping-pong, saturation staging, time glide | BluemchenFX (`src/fx/reverb.*`, `src/fx/delay.*`) | MIT |
+| CRUSH (sample & hold, quantiser), CHORUS (LFO shaping, modulated tap, feedback) | BluemchenFX (`src/fx/crush.*`, `src/fx/chorus.*`) | MIT |
+| RESON model: stiffness curve, harmonic compensation, Q-from-decay, q_loss | Émilie Gillet, Mutable Instruments Rings (`rings/dsp/resonator.cc`, MIT), as ported to DaisySP `PhysicalModeling/resonator.*` (MIT). Reimplemented with block-rate coefficients and stereo banks in `src/fx/reson.*` | MIT |
+| ZDF state-variable filter (RESON modes) | Andrew Simper, "Linear Trapezoidal Integrated SVF" (Cytomic technical paper, 2013) | (algorithm, own code) MIT |
 
 Further reading:
 - Csound manual, `reverbsc`: https://csound.com/manual/opcodes/reverbsc/

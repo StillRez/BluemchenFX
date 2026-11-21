@@ -40,6 +40,7 @@ class Delay : public Effect
     };
 
     const char *Name() const override { return "DELAY"; }
+    const char *Code() const override { return "DL"; }
     bool        Init(float sample_rate, Arena &mem) override;
     void        Reset() override;
 
