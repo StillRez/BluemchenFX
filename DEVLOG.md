@@ -863,8 +863,9 @@ above), BRIGHT (upper partials' decay), DECAY 0.05–10 s (RT60 of the fundament
 - New UI test renders every page of every effect at min/max/default: all fit, checked on a
   contact sheet too. Effect names/codes are tested unique.
 
-*Status: host-tested. Firmware compiled by CI (this session has no ARM toolchain);
-`prebuilt/` not updated. **Not yet run on hardware.** To check on the module:*
+*Status: host-tested. Firmware compiled by CI with no warnings (this session has no ARM
+toolchain): SRAM 149,436 B (30.4 %), DTCM 65,128 B (49.7 %). `prebuilt/` not updated: build
+locally with `make program-dfu`. **Not yet run on hardware.** To check on the module:*
 1. *TYPE lists CRUSH, CHORUS, RESON; each loads into a slot without clicks and sounds right.*
 2. *CRUSH: BITS down to 1–4 gets gritty and quiet parts drop out; RATE down gives aliasing;
    HI CUT softens it.*
