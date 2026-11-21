@@ -149,7 +149,8 @@ At 48 kHz with 32-sample blocks, the callback has **667 µs** per block.
   them slightly smaller. The chain engine itself adds about 2 %: per-slot buffer copies and the
   per-sample bypass/swap ramps, which run even when a slot is steady. The fast path (phase 3:
   skip the ramps once g = 1 and b = 0 and process straight into the next buffer; empty slots
-  copy nothing) should win most of that back. *Module numbers after it: pending.* Headroom check: four reverbs in a chain ≈ 4 × 14 % ≈ 56 %, so the
+  copy nothing) wins some of that back: StillRez saw the CPU page read lower on the module
+  (2026-11-21). *Exact numbers pending.* Headroom check: four reverbs in a chain ≈ 4 × 14 % ≈ 56 %, so the
   current effects fit comfortably in any 4-slot combination. Measured: D → R → R → R reads
   ≈ 55 % / 66 %, above the 5 + 3 × 14 ≈ 47 % sum; the difference is the chain engine overhead
   (≈ 2 %) plus SDRAM cache contention between three reverb tanks. Still a third of the budget
@@ -311,7 +312,7 @@ Each phase is one or more commits and ends with a hardware check by StillRez.
 | 0 | CPU meter + host test harness in CI. No behaviour change. **Done, verified on hardware (2026-11-18).** | CPU % shown, reverb/delay costs recorded |
 | 1 | Arena + per-slot instances, chain engine, settings v3 + migration. The UI temporarily edits slot 1 only (plus BYPASS / BYP MODE pages). **Done, verified on hardware (2026-11-18)** except MIDI CC (not tested yet). | Old settings come back in slot 1; no clicks on bypass/swap |
 | 2 | Hierarchical UI: HOME overview, slot pages, setup menu, long press = back. **Done, verified on hardware (2026-11-18).** | Build a 2–4 slot chain from the panel; closes #8 |
-| 3 | Chain presets + CC map, plus the chain engine's fast path for steady slots. **Done, compiled and host-tested (2026-11-20); hardware check pending.** | Old and new presets load; MIDI CCs reach slots 2–4 |
+| 3 | Chain presets + CC map, plus the chain engine's fast path for steady slots. **Done (2026-11-20). On hardware (2026-11-21): chain presets and lower CPU ✅; MIDI CCs for slots 2–4 and bypass CCs pending.** | Old and new presets load; MIDI CCs reach slots 2–4 |
 | 4 | New effects, cheapest first: filter/drive, wavefolder, bit/SR reduction, tremolo/chorus, compressor/limiter; then pitch/granular; then the looper (large pool) | Per-effect checks + CPU table |
 
 Related open issues: #7 (feedback saturation, can be done inside phase 4), #6 (tap tempo,

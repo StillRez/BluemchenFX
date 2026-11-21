@@ -802,6 +802,15 @@ on hardware.** To check on the module:*
 8. *CPU page: D → R → R → R (was ≈ 55 % / 66 %) and DELAY alone in slot 1 (was 7 % / 8 %).
    Both should be a little lower now.*
 
+## 2026-11-21 — Phase 3 on hardware: chain presets ✅, CPU lower ✅ (MIDI part pending)
+
+StillRez flashed the phase 3 build:
+- Saving and loading chain presets on the SD card works with chained effects ✅
+- The CPU page reads lower than before the fast path ✅ (exact numbers not recorded yet)
+
+Still to confirm on the module: MIDI CCs for slots 2–4 (CC 28–51), bypass CCs 52–55, Program
+Change loading a chain preset, and old presets 01–09 still loading into slot 1.
+
 ---
 
 ## Open items
