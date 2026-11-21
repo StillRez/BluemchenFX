@@ -99,7 +99,9 @@ class Chain
         bool    init_failure = false;
     };
 
-    void ProcessSlot(Slot        &s,
+    /** Returns false if the slot is a wire and wrote nothing (the caller
+     *  keeps using its input buffers). */
+    bool ProcessSlot(Slot        &s,
                      const float *in_l,
                      const float *in_r,
                      float       *out_l,

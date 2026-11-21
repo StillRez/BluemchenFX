@@ -85,11 +85,11 @@ src/fx/delay.*          stereo delay <= 2 s (SDRAM DelayLines), OnePole loop fil
 src/ui/ui.*             menus: HOME (chain) / slot pages / SETUP; draws via OneBitGraphicsDisplay
 src/app/settings.h      persisted POD struct v4 (chain: 4 SlotStates + Route per source, limiter), legacy v1-v3
 src/app/chain.*         chain engine: serial slots, per-slot g/b ramps, click-free swap/bypass
-src/app/chain_settings.* defaults, Valid(), MigrateV1/V2, SetSlotType (recall + routes), preset bridge
+src/app/chain_settings.* defaults, Valid(), MigrateV1/V2/V3, SetSlotType (recall + routes), preset bridge, MIDI CC map
 src/app/preset_text.*   preset text format (hardware-independent, host-testable)
 src/app/preset_store.*  SD mount + slot files (FatFS)
 src/app/limiter.*       always-on output limiter (after OUT): peak env + soft clip, never past the ceiling
-sd-card/BLUEMCHN/       example presets
+sd-card/BLUEMCHN/       example presets (01-09 single effect, 10-12 chains)
 tests/                  host tests: `make -C tests run` (DSP, presets, settings, chain, UI); CI gates the build on them
 tools/ui_shots.py       UI tests' screens -> PNG contact sheet (UI_SHOTS=dir make -C tests run ARGS=ui_)
 docs/design/            design docs (effect chaining plan, phases 0-4)
@@ -98,7 +98,7 @@ docs/design/            design docs (effect chaining plan, phases 0-4)
 ## Conventions and gotchas
 
 - **New effects** implement `fx::Effect` (incl. `Reset()` and `DefaultRoute()`) and publish a
-  `ParamSpec` table. UI pages, knob/CV routing, MIDI CC (20+n) and preset keys are generated
+  `ParamSpec` table. UI pages, knob/CV routing, MIDI CC (20 + 8·slot + n) and preset keys are generated
   from it. Max 8 params. Header names can be up to 7 chars. `Init(sr, Arena&)` takes big buffers
   from the slot's SDRAM arena (8 MB) and returns false if they don't fit. **No global/static
   state**: several instances can run at once. The object itself must fit
@@ -117,8 +117,13 @@ docs/design/            design docs (effect chaining plan, phases 0-4)
   has faded out (audio no longer touches the old effect). Never destroy or Init an effect the
   audio might be running. Params reach an effect only while `settings->slot[k].type` matches the
   loaded type (avoids the old effect getting the new one's values mid-fade, a click the tests
-  caught). Since phase 2 the UI edits every slot; MIDI CCs and SD presets still cover slot 1
-  only until phase 3.
+  caught). The UI (phase 2), MIDI CCs and SD presets (phase 3) cover every slot.
+  `Chain::ProcessSlot()` has a fast path: a wire slot writes nothing (the next slot reads the
+  same buffer) and a steady, fully-on, unbypassed slot runs the effect straight from buffer to
+  buffer. Both are bit-exact with the general ramp path (tests compare exactly).
+- **MIDI CC map** (`app::MapMidiCc()` / `ApplyMidiCc()` in `chain_settings.*`, host-tested):
+  CC 20 + 8·slot + param, CC 52–55 bypass slots 1–4. Adding parameters past 8 per effect would
+  break this map.
 - **`Settings` layout is persisted** (v4 = `0xB10E0004`, 172 bytes = v3 + limiter ceiling and
   release appended; pinned by the `settings_layout_is_stable` test). Adding fields: use `pad`
   bytes where zero means "old behaviour", or bump the version **and** add a migration (see
@@ -156,7 +161,11 @@ docs/design/            design docs (effect chaining plan, phases 0-4)
   They live in SDRAM (see DMA-reachable memory). Don't put `.bin` files in the SD root: the
   bootloader flashes the first one it finds there at power-up.
 - **Preset text format** is documented in `src/app/preset_text.h` and the README. Keep it
-  forward-compatible: unknown keys ignored, missing keys keep current values.
+  forward-compatible: unknown keys ignored, missing keys keep current values. Since phase 3,
+  SAVE SD writes chain presets (`[slot1]`..`[slot4]`, `SerializeChainPreset()`); files without
+  sections are the old single-effect format and load into slot 1 (`LoadPresetText()` handles
+  both). The example files in `sd-card/` are exactly what the serializer writes (a test checks
+  chain examples byte for byte). The SD read buffer is 4 KB; a 4 × DELAY chain is ~1.6 KB.
 - **Knob takeover:** knobs only take control after moving > 0.03; encoder edits, MIDI CC and
   preset loads disengage them.
 - **Hardware debugging without a debugger:** `make DIAG=1 BUILD_DIR=build-diag` (LED blinks after

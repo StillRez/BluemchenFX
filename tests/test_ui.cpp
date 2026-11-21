@@ -597,4 +597,14 @@ TEST(ui_every_screen_fits_the_display)
         r.Turn(1);
         r.CheckLayout("setup cpu/sd");
     }
+    // a used SD slot holding a 4-slot chain, with the longest name
+    r.gui.SetSdSlotInfo(1, true, "0123456789ABCDEF", "D>R>R>R");
+    r.GoHome();
+    r.Turn(10);
+    r.Click();
+    for(int p = 0; p < 12; p++)
+    {
+        r.Turn(1);
+        r.CheckLayout("setup sd chain");
+    }
 }

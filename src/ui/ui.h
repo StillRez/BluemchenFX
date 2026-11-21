@@ -72,7 +72,8 @@ class Ui
     /** Pending SD card request, if any (latest request wins). */
     bool TakeSdRequest(SdAction &action, int &slot);
     /** Result of a PEEK for the slot display. `used` = file exists.
-     *  Used slot: `text` = preset name, `detail` = its effect name.
+     *  Used slot: `text` = preset name, `detail` = what it holds
+     *  ("REVERB", "DEL>REV", "D>R>R>R"; empty if not known).
      *  Otherwise: `text` = status, `detail` = error code (bottom line). */
     void SetSdSlotInfo(int slot, bool used, const char *text, const char *detail);
     /** CPU load of the audio callback, 0..1 (average, peak since reset). */

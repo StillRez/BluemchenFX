@@ -25,6 +25,7 @@
 #include <cstddef>
 #include "fx/effect.h"
 #include "app/settings.h"
+#include "app/chain_settings.h"
 
 namespace app
 {
@@ -63,5 +64,63 @@ int FindPresetEffect(const fx::Effect *const *effects,
                      size_t                   num_effects,
                      const char              *text,
                      size_t                   len);
+
+// ------------------------------------------------------ chain presets
+/*
+ * Chain presets (phase 3) add [slot1]..[slot4] sections. Files without any
+ * section are the single-effect format above and keep loading into slot 1.
+ *
+ *   name   = Dub Space          global keys before the first section
+ *   input  = stereo
+ *   out    = -3.0               output level, dB (-24 .. 6, 0.5 dB steps)
+ *
+ *   [slot1]
+ *   effect      = DELAY         none = empty; missing = keep the slot's type
+ *   bypass      = off           on | off (default off)
+ *   bypass_mode = trails        trails | hard (default trails)
+ *   time        = 0.37          parameters of that slot's effect
+ *
+ *   knob1  = 1.time             routing, anywhere: none | <slot>.<param>,
+ *   cv2    = decay              or a bare <param> of the current section
+ *                               (slot 1 before the first section)
+ *
+ * A slot without a section is emptied: a chain preset is the whole chain.
+ * A slot that changes effect starts from that effect's defaults; missing
+ * keys keep the current value. The limiter (SETUP) is not part of presets.
+ */
+
+enum class PresetLoad
+{
+    OK,
+    BAD_FILE,   // nothing usable in it
+    BAD_EFFECT, // names an effect this firmware doesn't have
+};
+
+/** Writes the whole chain as a chain preset. Returns bytes written (0 if it
+ *  didn't fit). */
+size_t SerializeChainPreset(const Settings &s,
+                            const char     *name,
+                            char           *out,
+                            size_t          capacity);
+
+/** Loads either format onto `s` (in: current, out: loaded; `s` and
+ *  `recall` only change on OK). Old single-effect files go to slot 1 and
+ *  empty slots 2-4, as before. */
+PresetLoad LoadPresetText(const char *text, size_t len, Settings &s, Recall &recall);
+
+/** What a file holds, without applying it (for the SD slot pages). */
+struct PresetInfo
+{
+    char    name[kPresetNameLen];
+    bool    chain;            // has [slotN] sections
+    uint8_t type[kNumSlots];  // effect per slot (FX_NONE = empty)
+    bool    known;            // types are known (false: old file without
+                              // an effect line, or an unknown effect)
+};
+PresetInfo PeekPresetText(const char *text, size_t len);
+
+/** Short text for the SD slot page: one effect -> "REVERB", two -> "DEL>REV",
+ *  three or four -> "D>R>R>R", none -> "EMPTY". "" when not `known`. */
+void PresetSummary(const PresetInfo &info, char *buf, size_t cap);
 
 } // namespace app

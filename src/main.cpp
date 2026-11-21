@@ -13,9 +13,11 @@
  *                     takes over once the knob is moved
  *   CV 1 / 2          bipolar offset (+-5 V = +-full range) on the routed
  *                     parameter
- *   MIDI CC 20..27    parameter 1..8 of slot 1's effect (any channel)
- *   LOAD SD / SAVE SD presets as text files on the microSD card
- *                     (0:/BLUEMCHN/PRESET01.TXT .. PRESET99.TXT), slot 1
+ *   MIDI CC 20..51    slot n (0-3), parameter p (0-7): CC 20 + 8n + p
+ *                     (any channel; slot 1 = CC 20..27 as before)
+ *   MIDI CC 52..55    bypass slots 1-4 (value >= 64 = bypassed)
+ *   LOAD SD / SAVE SD chain presets as text files on the microSD card
+ *                     (0:/BLUEMCHN/PRESET01.TXT .. PRESET99.TXT)
  *   MIDI Program Chg  0..98 loads SD preset 1..99
  *   Output            OUT level, then an always-on soft limiter (SETUP:
  *                     LIMIT ceiling, LIM REL release; app/limiter.h)
@@ -46,7 +48,6 @@ static constexpr uint32_t kFlashOffset   = 0x7FF000; // last 4 KB sector of QSPI
 static constexpr float    kLongPressMs   = 700.f;
 static constexpr float    kCvDeadband    = 0.02f;
 static constexpr float    kKnobEngage    = 0.03f;
-static constexpr uint8_t  kMidiCcBase    = 20;
 static constexpr uint32_t kDisplayPeriod = 33; // ms (~30 fps)
 static constexpr uint32_t kCpuPeakSettle = 2000; // ms: ignore start-up blocks in the peak
 
@@ -320,7 +321,7 @@ using SdStatus = app::PresetStore::Status;
 static void RefreshSlotInfo(int slot)
 {
     char     name[app::kPresetNameLen];
-    char     fx_name[app::kEffectNameLen];
+    char     fx_name[16];
     SdStatus st = presets.Peek(slot, name, sizeof(name), fx_name, sizeof(fx_name));
     if(st == SdStatus::OK)
         gui.SetSdSlotInfo(slot, true, name[0] ? name : "(no name)", fx_name);
@@ -339,16 +340,12 @@ static void SdBusyHint()
 static void LoadPreset(int slot, uint32_t now)
 {
     SdBusyHint();
-    // Single-effect presets: loaded into slot 1, slots 2-4 emptied
-    uint8_t          type  = settings->slot[0].type < fx::FX_COUNT ? settings->slot[0].type
-                                                                   : (uint8_t)fx::FX_REVERB;
-    app::EffectState state = app::SlotAsEffectState(*settings, 0);
-    uint8_t          mode  = settings->input_mode;
-    SdStatus         st    = presets.Load(slot, type, state, mode);
+    // Chain presets set all four slots; old single-effect files go to
+    // slot 1 and empty slots 2-4
+    app::Settings next = *settings;
+    SdStatus      st   = presets.Load(slot, next, recall);
     if(st == SdStatus::OK)
     {
-        app::Settings next = *settings;
-        app::ApplySingleEffectPreset(next, recall, type, state, mode);
         ApplySettings(next);
         static char msg[10];
         snprintf(msg, sizeof(msg), "LOAD %02d", slot);
@@ -373,10 +370,7 @@ static void HandleSd(uint32_t now)
         case ui::SdAction::LOAD: LoadPreset(slot, now); break;
         case ui::SdAction::SAVE:
         {
-            SdStatus st = presets.Save(slot,
-                                       settings->slot[0].type,
-                                       app::SlotAsEffectState(*settings, 0),
-                                       settings->input_mode);
+            SdStatus st = presets.Save(slot, *settings);
             if(st == SdStatus::OK)
             {
                 static char msg[10];
@@ -409,16 +403,14 @@ static void HandleMidi(uint32_t now)
         }
         if(ev.type != ControlChange)
             continue;
-        ControlChangeEvent cc  = ev.AsControlChange();
-        int                idx = (int)cc.control_number - kMidiCcBase;
-        const fx::Effect  *e   = fx::Prototype(settings->slot[0].type);
-        if(!e || idx < 0 || idx >= (int)e->NumParams())
-            continue;
-        settings->slot[0].norm[idx] = cc.value / 127.f;
-        gui.Peek(0, idx, now);
+        ControlChangeEvent cc = ev.AsControlChange();
+        app::CcTarget      t  = app::ApplyMidiCc(*settings, cc.control_number, cc.value);
+        if(t.kind != app::CcTarget::PARAM)
+            continue; // bypass CCs: the chain ramps in SyncChain(), HOME shows it
+        gui.Peek(t.slot, t.param, now);
         // a knob routed here must be moved again before it takes over
         for(int k = 0; k < 2; k++)
-            if(settings->route[k].Is(0, idx))
+            if(settings->route[k].Is(t.slot, t.param))
                 ResetKnobTakeover(k);
     }
 }
@@ -483,7 +475,7 @@ int main(void)
     Diag("4 FX RESET");
     gui.Init(&hw.display, settings);
     Splash();
-    presets.Init(fx::Prototypes(), fx::FX_COUNT); // card is mounted on first use
+    presets.Init(); // card is mounted on first use
     Diag("5 SD INIT");
 
     hw.StartAdc();

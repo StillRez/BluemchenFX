@@ -83,7 +83,8 @@ slots keep playing. Saved settings from earlier versions move into slot 1 automa
 | Encoder hold (0.7 s) | HOME: store all settings to flash ("SAVED"). Elsewhere: **back to HOME** (also cancels an edit) |
 | Knob 1 / Knob 2 | Absolute control of the routed parameter, in any slot (defaults: reverb **Decay** / **Mix**, delay **Time** / **Mix**). A knob only takes over once you move it, so stored values aren't overwritten at power-up |
 | CV 1 / CV 2 | Bipolar offset on the routed parameter, ±5 V = ±full range (defaults: reverb **Decay** / **Hi Cut**, delay **Time** / **Feedback**) |
-| MIDI CC 20+ | Parameters of the effect in **slot 1**, in page order, CC 20 = first (reverb: Decay, Mix, Lo Cut, Hi Cut; delay: Time, Feedback, Mix, Ping, Lo Cut, Hi Cut). Any channel. Other slots get CCs in phase 3 |
+| MIDI CC 20–51 | Parameters of every slot, in page order: CC = 20 + 8 × (slot − 1) + parameter number (from 0). Slot 1 = CC 20–27, slot 2 = 28–35, slot 3 = 36–43, slot 4 = 44–51 (reverb: Decay, Mix, Lo Cut, Hi Cut; delay: Time, Feedback, Mix, Ping, Lo Cut, Hi Cut). Any channel |
+| MIDI CC 52–55 | Bypass slots 1–4: value 64–127 = bypassed, 0–63 = on (in the slot's bypass mode) |
 | MIDI Program Change 0–98 | Load SD preset 1–99 |
 
 MIDI comes in on the TRS jack. Set the module's MIDI jumpers to **TRS Type A**, or nothing will arrive.
@@ -129,8 +130,7 @@ the page you were on last.
 6. **CPU** – audio processing load: average (large) and peak since the last reset (`pk`). Click
    resets the peak. The header shows `CPU!` inverted when the peak reaches 95 %
 7. **LOAD SD** – click, turn to pick a slot (01–99), click again to load it
-8. **SAVE SD** – click, turn to pick a slot, click again to write the current setup to it.
-   Until chain presets (phase 3), a preset holds **slot 1** only
+8. **SAVE SD** – click, turn to pick a slot, click again to write the whole chain to it
 9. **SAVE** – store the current setup to internal flash as the power-up state
 
 ### Reverb parameters
@@ -166,10 +166,11 @@ Presets are plain text files on the microSD card (FAT32), one per slot:
 BLUEMCHN/PRESET01.TXT … PRESET99.TXT
 ```
 
-The LOAD SD / SAVE SD pages show the slot number, which effect a used slot is for (`REVERB` /
-`DELAY`) or `EMPTY` (or `NO CARD`), and the preset's name. Presets are still single-effect
-until phase 3: loading one puts its effect into slot 1 and empties slots 2–4, and saving
-writes slot 1. The card is never touched at boot; it's mounted the first time you open
+A preset is the **whole chain**: all four slots (effect, bypass, parameters), the knob/CV
+routing, the input mode and the OUT level. The limiter settings are not part of presets.
+The LOAD SD / SAVE SD pages show the slot number, what a used slot holds (`REVERB`, `DEL>REV`
+for two effects, `D>R>R>R` for three or four), `EMPTY` (or `NO CARD`), and the preset's name.
+The card is never touched at boot; it's mounted the first time you open
 an SD page (the screen shows `SD...` while that happens, and audio keeps running). It can be
 inserted or swapped at any time. Saving to a slot that already has a name keeps that name; new
 slots are named `PRESET nn`.
@@ -196,8 +197,57 @@ of the card:
 |---|---|---|
 | 01–05 | Reverb | Small Room, Plate, Big Hall, Dark Cave, Mono Wash |
 | 06–09 | Delay | Slapback, Ping Pong, Dub Echo, Tape Wash |
+| 10 | Delay → Reverb | Dub Space |
+| 11 | Reverb → Delay | Room Echo |
+| 12 | Delay → Reverb → Reverb (bypassed) | Infinite Wash |
 
-### File format
+### Chain file format
+
+What SAVE SD writes (shortened):
+
+```
+name        = Dub Space
+input       = stereo
+out         = 0.0      # output level in dB, -24.0 .. 6.0
+
+[slot1]
+effect      = DELAY    # REVERB | DELAY | none
+bypass      = off      # on | off
+bypass_mode = trails   # trails | hard
+time        = 0.37
+feedbk      = 55
+mix         = 40
+
+[slot2]
+effect      = REVERB
+decay       = 4.00
+mix         = 30
+
+[slot3]
+effect      = none
+
+[slot4]
+effect      = none
+
+knob1       = 1.time   # none | <slot>.<param>
+knob2       = 2.mix
+cv1         = 1.feedbk
+cv2         = 2.decay
+```
+
+- A slot without a `[slotN]` section is emptied; a section without an `effect` line keeps the
+  slot's current effect.
+- A slot that changes effect starts from that effect's defaults, then takes the file's values.
+  `bypass` / `bypass_mode` default to `off` / `trails` when missing.
+- Routing can also name a parameter of the current section without the slot number
+  (`knob2 = mix` inside `[slot2]` means `2.mix`).
+- An unknown `effect` name anywhere shows `BAD FX` and changes nothing.
+- All the rules below (comments, units, clamping, missing and unknown keys) apply too.
+
+### Single-effect file format (before v0.7)
+
+Files without `[slotN]` sections still load: the effect goes into slot 1 and slots 2–4 are
+emptied.
 
 ```
 # '#' or ';' starts a comment (also at the end of a line)
@@ -220,7 +270,7 @@ cv2    = hi_cut
 - Delete a line and loading keeps the module's current value for that setting.
 - Unknown keys are ignored, so files stay loadable as the firmware grows.
 - If a file has nothing usable in it, the module shows `BAD FILE` and changes nothing; an
-  unknown `effect` name shows `BAD FX`. A file without an `effect` line applies to the active effect.
+  unknown `effect` name shows `BAD FX`. A file without an `effect` line applies to slot 1's effect.
 - Delay keys: `time` (seconds), `feedbk` (%), `mix` (%), `ping` (%), `lo_cut`, `hi_cut` (Hz).
 
 ## Code layout

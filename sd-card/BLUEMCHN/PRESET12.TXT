@@ -1,0 +1,48 @@
+# BluemchenFX chain preset
+# Edit with any text editor. '#' starts a comment.
+# Lines you delete keep the module's current value;
+# a [slotN] section you delete empties that slot.
+
+name        = Infinite Wash
+# input: stereo | mono (mono = left input feeds both channels)
+input       = stereo
+out         = -3.0       # output level, -24.0 .. 6.0 dB
+
+[slot1]
+effect      = DELAY
+bypass      = off
+bypass_mode = trails     # trails | hard
+time        = 0.60       # 0.01 .. 2.00 s
+feedbk      = 70         # 0 .. 95 %
+mix         = 50         # 0 .. 100 %
+ping        = 0          # 0 .. 100 %
+lo_cut      = 60         # 20 .. 1000 Hz
+hi_cut      = 2500       # 500 .. 18000 Hz
+
+[slot2]
+effect      = REVERB
+bypass      = off
+bypass_mode = trails     # trails | hard
+decay       = 8.00       # 0.20 .. 30.00 s
+mix         = 60         # 0 .. 100 %
+lo_cut      = 36         # 20 .. 1000 Hz
+hi_cut      = 5000       # 500 .. 18000 Hz
+
+[slot3]
+effect      = REVERB
+bypass      = on
+bypass_mode = trails     # trails | hard
+decay       = 20.00      # 0.20 .. 30.00 s
+mix         = 50         # 0 .. 100 %
+lo_cut      = 300        # 20 .. 1000 Hz
+hi_cut      = 6143       # 500 .. 18000 Hz
+
+[slot4]
+effect      = none
+
+# routing: none | <slot>.<param>, e.g. 1.time or 2.decay
+# knobs set the value directly, CV adds +-5V = +-full range
+knob1       = 1.feedbk
+knob2       = 2.mix
+cv1         = 2.decay
+cv2         = 1.time

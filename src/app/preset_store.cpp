@@ -41,7 +41,7 @@ using SafeFil = DmaSafe<FIL, offsetof(FIL, buf)>;
 // initialises these objects itself (f_mount / f_open).
 static SafeFs DSY_SDRAM_BSS           s_fs;
 static SafeFil DSY_SDRAM_BSS          s_file;
-alignas(32) static char DSY_SDRAM_BSS s_buf[2048];
+alignas(32) static char DSY_SDRAM_BSS s_buf[4096];
 
 // Each object is a whole number of cache lines, so nothing else shares one
 static_assert(sizeof(SafeFs) % 32 == 0 && sizeof(SafeFil) % 32 == 0,
@@ -77,10 +77,8 @@ static const BusCfg kBusCfgs[] = {
 static constexpr int kNumBusCfgs = sizeof(kBusCfgs) / sizeof(kBusCfgs[0]);
 
 // ------------------------------------------------------------- mounting
-void PresetStore::Init(const fx::Effect *const *effects, size_t num_effects)
+void PresetStore::Init()
 {
-    effects_     = effects;
-    num_effects_ = num_effects;
     // Registers the SD driver with FatFS and sets the "0:/" path.
     // Does not touch the card.
     fsi_.Init(FatFSInterface::Config::MEDIA_SD);
@@ -209,75 +207,41 @@ PresetStore::Status PresetStore::ReadSlot(int slot, size_t &len)
 PresetStore::Status PresetStore::Peek(int    slot,
                                       char  *name,
                                       size_t len,
-                                      char  *effect,
-                                      size_t effect_len)
+                                      char  *summary,
+                                      size_t summary_len)
 {
-    name[0]   = 0;
-    effect[0] = 0;
+    name[0]    = 0;
+    summary[0] = 0;
     size_t n;
     Status st = ReadSlot(slot, n);
     if(st != Status::OK)
         return st;
-    EffectState scratch;
-    uint8_t     scratch_input = 0;
-    std::memset(&scratch, 0, sizeof(scratch));
-    ParseResult res = ParsePreset(*effects_[0], s_buf, n, scratch, scratch_input);
-    strncpy(name, res.name, len - 1);
+    PresetInfo info = PeekPresetText(s_buf, n);
+    strncpy(name, info.name, len - 1);
     name[len - 1] = 0;
-    strncpy(effect, res.effect, effect_len - 1);
-    effect[effect_len - 1] = 0;
+    PresetSummary(info, summary, summary_len);
     return Status::OK;
 }
 
-PresetStore::Status
-PresetStore::Load(int slot, uint8_t &effect, EffectState &state, uint8_t &input_mode)
+PresetStore::Status PresetStore::Load(int slot, Settings &s, Recall &recall)
 {
     size_t n;
     Status st = ReadSlot(slot, n);
     if(st != Status::OK)
         return st;
-
-    int idx = FindPresetEffect(effects_, num_effects_, s_buf, n);
-    if(idx == kPresetBadEffect)
-        return Status::BAD_EFFECT;
-    if(idx == kPresetNoEffect)
-        idx = effect; // old/hand-written file: current effect
-    if(idx < 0 || idx >= (int)num_effects_)
-        return Status::BAD_EFFECT;
-
-    // A file for another effect starts from that effect's defaults
-    EffectState tmp  = state;
-    uint8_t     mode = input_mode;
-    if(idx != effect)
+    switch(LoadPresetText(s_buf, n, s, recall))
     {
-        for(size_t i = 0; i < kMaxParams; i++)
-            tmp.norm[i] = i < effects_[idx]->NumParams() ? effects_[idx]->Spec(i).def
-                                                         : 0.f;
-        for(int r = 0; r < SRC_LAST; r++)
-        {
-            int p        = effects_[idx]->DefaultRoute(r);
-            tmp.route[r] = (int8_t)(p >= 0 ? p : kRouteNone);
-        }
+        case PresetLoad::OK: return Status::OK;
+        case PresetLoad::BAD_EFFECT: return Status::BAD_EFFECT;
+        default: return Status::PARSE_ERROR;
     }
-    ParseResult res = ParsePreset(*effects_[idx], s_buf, n, tmp, mode);
-    if(res.applied == 0)
-        return Status::PARSE_ERROR;
-    effect     = (uint8_t)idx;
-    state      = tmp;
-    input_mode = mode;
-    return Status::OK;
 }
 
-PresetStore::Status PresetStore::Save(int                slot,
-                                      uint8_t            effect,
-                                      const EffectState &state,
-                                      uint8_t            input_mode)
+PresetStore::Status PresetStore::Save(int slot, const Settings &settings)
 {
-    if(effect >= num_effects_)
-        return Status::BAD_EFFECT;
     // Keep a name the user typed into the file
     char   name[kPresetNameLen];
-    char   unused[kEffectNameLen];
+    char   unused[16];
     Status peek = Peek(slot, name, sizeof(name), unused, sizeof(unused));
     if(peek == Status::NO_CARD || peek == Status::IO_ERROR)
         return peek;
@@ -299,12 +263,7 @@ PresetStore::Status PresetStore::Save(int                slot,
             continue;
         }
 
-        size_t len = SerializePreset(*effects_[effect],
-                                     state,
-                                     input_mode,
-                                     name,
-                                     s_buf,
-                                     sizeof(s_buf));
+        size_t len = SerializeChainPreset(settings, name, s_buf, sizeof(s_buf));
         if(len == 0)
             return Status::IO_ERROR;
 

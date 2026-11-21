@@ -122,7 +122,7 @@ void Chain::Poll()
     }
 }
 
-void Chain::ProcessSlot(Slot        &s,
+bool Chain::ProcessSlot(Slot        &s,
                         const float *in_l,
                         const float *in_r,
                         float       *out_l,
@@ -137,12 +137,11 @@ void Chain::ProcessSlot(Slot        &s,
 
     if(s.g <= 0.f && g_target <= 0.f)
     {
-        // Wire: the effect is not processed (and may be swapped/reset)
+        // Wire: the effect is not processed (and may be swapped/reset).
+        // Nothing to copy: the next slot reads this slot's input.
         s.g    = 0.f;
         s.idle = true;
-        std::memcpy(out_l, in_l, n * sizeof(float));
-        std::memcpy(out_r, in_r, n * sizeof(float));
-        return;
+        return false;
     }
     s.idle = false;
 
@@ -150,6 +149,14 @@ void Chain::ProcessSlot(Slot        &s,
     if(params_type == s.type)
         for(size_t i = 0; i < e.NumParams(); i++)
             e.SetParam(i, params[i]);
+
+    // Steady and fully on (no ramp, not bypassed): the mix below would give
+    // exactly the effect's output, so skip the ramps and copies.
+    if(s.g >= 1.f && g_target >= 1.f && s.b <= 0.f && b_target <= 0.f)
+    {
+        e.Process(in_l, in_r, out_l, out_r, n);
+        return true;
+    }
 
     // Per-sample ramps, recorded so the mix below uses the same values
     float g[kMaxBlock], b[kMaxBlock];
@@ -175,6 +182,7 @@ void Chain::ProcessSlot(Slot        &s,
         out_l[i] = in_l[i] * (1.f - g[i]) + g[i] * (y_[0][i] + in_l[i] * b[i]);
         out_r[i] = in_r[i] * (1.f - g[i]) + g[i] * (y_[1][i] + in_r[i] * b[i]);
     }
+    return true;
 }
 
 void Chain::Process(const float   *in_l,
@@ -197,15 +205,15 @@ void Chain::Process(const float   *in_l,
         for(size_t k = 0; k < kNumSlots; k++)
         {
             const int nxt = cur ^ 1;
-            ProcessSlot(slots_[k],
-                        buf_[cur][0],
-                        buf_[cur][1],
-                        buf_[nxt][0],
-                        buf_[nxt][1],
-                        n,
-                        params[k],
-                        types[k]);
-            cur = nxt;
+            if(ProcessSlot(slots_[k],
+                           buf_[cur][0],
+                           buf_[cur][1],
+                           buf_[nxt][0],
+                           buf_[nxt][1],
+                           n,
+                           params[k],
+                           types[k]))
+                cur = nxt;
         }
 
         std::memcpy(out_l + pos, buf_[cur][0], n * sizeof(float));

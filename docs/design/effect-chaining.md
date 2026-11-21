@@ -147,9 +147,9 @@ At 48 kHz with 32-sample blocks, the callback has **667 µs** per block.
   cache. **Host µs are not a guide to module cost**; always measure on the module. Each
   number includes the fixed overhead (controls, encoder, meters), so a dry baseline will make
   them slightly smaller. The chain engine itself adds about 2 %: per-slot buffer copies and the
-  per-sample bypass/swap ramps, which run even when a slot is steady. A fast path (skip the
-  ramps once g = 1 and b = 0, process straight into the next buffer) should win most of that
-  back; it's worth doing before heavy effects arrive. Headroom check: four reverbs in a chain ≈ 4 × 14 % ≈ 56 %, so the
+  per-sample bypass/swap ramps, which run even when a slot is steady. The fast path (phase 3:
+  skip the ramps once g = 1 and b = 0 and process straight into the next buffer; empty slots
+  copy nothing) should win most of that back. *Module numbers after it: pending.* Headroom check: four reverbs in a chain ≈ 4 × 14 % ≈ 56 %, so the
   current effects fit comfortably in any 4-slot combination. Measured: D → R → R → R reads
   ≈ 55 % / 66 %, above the 5 + 3 × 14 ≈ 47 % sum; the difference is the chain engine overhead
   (≈ 2 %) plus SDRAM cache contention between three reverb tanks. Still a third of the budget
@@ -223,7 +223,12 @@ cv2    = none
   clears slots 2–4, and its routes like `knob1 = decay` mean slot 1.
 - A section without `effect =` keeps that slot's current type. A missing section empties the
   slot, so a preset always fully defines the chain and recalls exactly.
-- Per slot: `bypass = on|off`, `bypass_mode = trails|hard` (default trails).
+- Per slot: `bypass = on|off`, `bypass_mode = trails|hard` (default off / trails).
+- *(Phase 3 implementation)* A slot that changes effect starts from the new effect's defaults
+  before the file's values apply (as old single-effect files already did). `out` is in dB.
+  The limiter is a global setting and stays out of presets. Routing may also name a bare
+  parameter of the current section. SAVE SD always writes this format, even for a single
+  effect, so a saved preset recalls bypass and the other slots exactly.
 - Unknown keys are ignored, as today.
 
 ## 4. UI
@@ -306,7 +311,7 @@ Each phase is one or more commits and ends with a hardware check by StillRez.
 | 0 | CPU meter + host test harness in CI. No behaviour change. **Done, verified on hardware (2026-11-18).** | CPU % shown, reverb/delay costs recorded |
 | 1 | Arena + per-slot instances, chain engine, settings v3 + migration. The UI temporarily edits slot 1 only (plus BYPASS / BYP MODE pages). **Done, verified on hardware (2026-11-18)** except MIDI CC (not tested yet). | Old settings come back in slot 1; no clicks on bypass/swap |
 | 2 | Hierarchical UI: HOME overview, slot pages, setup menu, long press = back. **Done, verified on hardware (2026-11-18).** | Build a 2–4 slot chain from the panel; closes #8 |
-| 3 | Chain presets + CC map | Old and new presets load; MIDI CCs reach slots 2–4 |
+| 3 | Chain presets + CC map, plus the chain engine's fast path for steady slots. **Done, compiled and host-tested (2026-11-20); hardware check pending.** | Old and new presets load; MIDI CCs reach slots 2–4 |
 | 4 | New effects, cheapest first: filter/drive, wavefolder, bit/SR reduction, tremolo/chorus, compressor/limiter; then pitch/granular; then the looper (large pool) | Per-effect checks + CPU table |
 
 Related open issues: #7 (feedback saturation, can be done inside phase 4), #6 (tap tempo,

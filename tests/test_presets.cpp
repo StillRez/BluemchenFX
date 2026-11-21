@@ -76,6 +76,8 @@ TEST(presets_example_files_parse_cleanly)
         std::string text;
         if(!ReadFile(path, text))
             continue;
+        if(text.find("[slot") != std::string::npos)
+            continue; // chain preset: tests/test_chain_presets.cpp
         found++;
         int idx = app::FindPresetEffect(kEffects, kNum, text.data(), text.size());
         CHECKF(idx >= 0, "%s: effect not recognised (%d)", path, idx);

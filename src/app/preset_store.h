@@ -32,28 +32,22 @@ class PresetStore
         BAD_EFFECT,  // "effect = ..." names an effect this firmware lacks
     };
 
-    /** No card access here; only sets up the driver. `effects` is the
-     *  firmware's effect list (index = fx::EffectId). */
-    void Init(const fx::Effect *const *effects, size_t num_effects);
+    /** No card access here; only sets up the driver. */
+    void Init();
 
     bool Mounted() const { return mounted_; }
 
-    /** Writes one effect's settings (`effect` = index into the effect list)
-     *  to slot (1..99). Keeps the slot's existing name if it has one,
-     *  otherwise "PRESET nn". */
-    Status Save(int                slot,
-                uint8_t            effect,
-                const EffectState &state,
-                uint8_t            input_mode);
+    /** Writes the whole chain to slot (1..99) as a chain preset. Keeps the
+     *  slot's existing name if it has one, otherwise "PRESET nn". */
+    Status Save(int slot, const Settings &s);
 
-    /** Reads the slot's file on top of the given values (in: current, out:
-     *  loaded; only changed on success). `effect` changes if the file names
-     *  another effect, which then starts from its defaults; a file without
-     *  an effect line applies to `effect`. */
-    Status Load(int slot, uint8_t &effect, EffectState &state, uint8_t &input_mode);
+    /** Reads the slot's file (chain or old single-effect format) on top of
+     *  `s`; `s` and `recall` only change on success. */
+    Status Load(int slot, Settings &s, Recall &recall);
 
-    /** Reads only the slot's name and effect name (empty if missing). */
-    Status Peek(int slot, char *name, size_t len, char *effect, size_t effect_len);
+    /** Reads only the slot's name and a short summary of its chain
+     *  ("REVERB", "DEL>REV", "D>R>R>R"; empty if not known). */
+    Status Peek(int slot, char *name, size_t len, char *summary, size_t summary_len);
 
     static const char *StatusText(Status s);
 
@@ -69,9 +63,6 @@ class PresetStore
     Status ReadSlot(int slot, size_t &len);
     void   RecordError(int fresult, int bus_cfg);
     Status MountFailureStatus() const;
-
-    const fx::Effect *const *effects_     = nullptr;
-    size_t                   num_effects_ = 0;
 
     daisy::SdmmcHandler   sd_;
     daisy::FatFSInterface fsi_;

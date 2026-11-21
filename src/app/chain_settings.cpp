@@ -230,4 +230,39 @@ void ApplySingleEffectPreset(Settings          &s,
     s.input_mode = input_mode;
 }
 
+CcTarget MapMidiCc(const Settings &s, uint8_t cc)
+{
+    CcTarget none{CcTarget::NONE, -1, -1};
+    if(cc >= kMidiCcBypassBase && cc < kMidiCcBypassBase + kNumSlots)
+    {
+        int slot = cc - kMidiCcBypassBase;
+        if(!fx::Prototype(s.slot[slot].type))
+            return none;
+        return CcTarget{CcTarget::BYPASS, (int8_t)slot, -1};
+    }
+    if(cc < kMidiCcParamBase || cc >= kMidiCcBypassBase)
+        return none;
+    int               slot  = (cc - kMidiCcParamBase) / (int)kMaxParams;
+    int               param = (cc - kMidiCcParamBase) % (int)kMaxParams;
+    const fx::Effect *e     = fx::Prototype(s.slot[slot].type);
+    if(!e || param >= (int)e->NumParams())
+        return none;
+    return CcTarget{CcTarget::PARAM, (int8_t)slot, (int8_t)param};
+}
+
+CcTarget ApplyMidiCc(Settings &s, uint8_t cc, uint8_t value)
+{
+    CcTarget t = MapMidiCc(s, cc);
+    if(value > 127)
+        value = 127;
+    if(t.kind == CcTarget::PARAM)
+        s.slot[t.slot].norm[t.param] = value / 127.f;
+    else if(t.kind == CcTarget::BYPASS)
+    {
+        uint8_t &f = s.slot[t.slot].flags;
+        f          = value >= 64 ? (uint8_t)(f | SLOT_BYPASS) : (uint8_t)(f & ~SLOT_BYPASS);
+    }
+    return t;
+}
+
 } // namespace app

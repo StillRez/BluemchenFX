@@ -65,4 +65,28 @@ void ApplySingleEffectPreset(Settings          &s,
                              const EffectState &st,
                              uint8_t            input_mode);
 
+/** MIDI CC map: slot n (0-3), parameter p (0-7) -> CC 20 + 8n + p
+ *  (slot 1 keeps CC 20-27); CC 52-55 bypass slots 1-4 (value >= 64 = on). */
+static constexpr uint8_t kMidiCcParamBase  = 20;
+static constexpr uint8_t kMidiCcBypassBase = kMidiCcParamBase + kNumSlots * kMaxParams; // 52
+
+struct CcTarget
+{
+    enum Kind : uint8_t
+    {
+        NONE,
+        PARAM,
+        BYPASS,
+    } kind;
+    int8_t slot;
+    int8_t param;
+};
+
+/** What `cc` controls with the chain as it is in `s` (NONE if the slot is
+ *  empty or its effect has no such parameter). */
+CcTarget MapMidiCc(const Settings &s, uint8_t cc);
+
+/** Applies a CC to `s`. Returns what it changed (NONE: nothing). */
+CcTarget ApplyMidiCc(Settings &s, uint8_t cc, uint8_t value);
+
 } // namespace app
