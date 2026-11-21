@@ -86,6 +86,8 @@ slots keep playing. Saved settings from earlier versions move into slot 1 automa
 | MIDI CC 20+ | Parameters of the effect in **slot 1**, in page order, CC 20 = first (reverb: Decay, Mix, Lo Cut, Hi Cut; delay: Time, Feedback, Mix, Ping, Lo Cut, Hi Cut). Any channel. Other slots get CCs in phase 3 |
 | MIDI Program Change 0–98 | Load SD preset 1–99 |
 
+MIDI comes in on the TRS jack. Set the module's MIDI jumpers to **TRS Type A**, or nothing will arrive.
+
 Moving a knob or sending a CC briefly pops up that parameter's page (with its slot number).
 
 ## Display pages (64×32 OLED)

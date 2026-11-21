@@ -724,6 +724,16 @@ harmless at 48 kHz, so nothing changed.
 
 Docs only: no firmware change, `prebuilt/` unchanged, nothing to verify on hardware.
 
+## 2026-11-20 — MIDI CC verified on hardware ✅
+
+StillRez tested MIDI input on the v0.6.0 build, the last unchecked item from phase 1.
+- The module's MIDI input needed its jumpers set to **TRS Type A**. Until then nothing arrived.
+- With TRS-A set, MIDI works: CC 20+n reaches the parameters of slot 1's effect, and Program
+  Change loads SD presets ✅
+
+No firmware change. Everything through v0.6.0 is now verified on hardware. Next: phase 3
+(chain presets + a CC map covering all four slots).
+
 ---
 
 ## Open items
@@ -738,8 +748,7 @@ Tracked as GitHub Issues:
 - #7 Delay sound tuning: feedback saturation
 - ~~#8 UI tweaks: HOME page crowding~~ (done: phase 2 chain HOME, small text in capitals)
 - ~~#10 Output limiter for stacked-effect peaking~~ (done)
-- *(no issue yet)* MIDI CC not yet re-tested since the chain engine (Phase 1). StillRez is
-  checking the module's MIDI input hardware first.
+- ~~MIDI CC re-test since the chain engine~~ (done: works with the input jumpered for TRS-A)
 - *(no issue yet)* Chain engine overhead (~2 % CPU): add a fast path for steady slots.
 - #9 Tune each effect's default settings (`ParamSpec::def`) by ear, so loading an effect into an
   empty slot sounds good straight away. StillRez will do this on the module.

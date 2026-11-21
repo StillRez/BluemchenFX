@@ -20,7 +20,7 @@ Verified on the module unless noted.
 | Pots 1 / 2 | D16 / D15 (`flip = false`) |
 | CV 1 / 2 | D21 / D18 (`flip = true`, inverting stage, mapped to -1..+1) |
 | OLED | SSD1306 64x32, I2C (libDaisy `SSD130xI2c64x32Driver` defaults) |
-| MIDI | TRS in, UART (`MidiUartHandler` defaults) |
+| MIDI | TRS in, UART (`MidiUartHandler` defaults). The input jumpers must be set to **TRS Type A**; with them set, CC and Program Change work (confirmed 2026-11-20). |
 | microSD | SDMMC1. **1-bit only.** 4-bit transfers never complete on this board, and each failed attempt waits ~172 s (HAL timeout 2^32 clocks @ 25 MHz). Do not re-enable 4-bit ahead of 1-bit. 1-bit at 12.5 MHz: first mount is near-instant (confirmed on hardware, v0.3.0). |
 | Audio | 48 kHz, 32-sample blocks, stereo in/out |
 | Boot | **Daisy bootloader v6.4 (`intdfu-2000ms`) + `APP_TYPE = BOOT_SRAM`** since v0.5.0: app stored in QSPI at `0x90040000`, copied to AXI SRAM at boot. Verified on hardware: boot, flashing, settings, QSPI saves, SD presets (DMA buffers in SDRAM), boot with SD card inserted. |
