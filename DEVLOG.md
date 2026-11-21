@@ -784,8 +784,11 @@ SD presets and MIDI now cover the whole chain. Before this, both only reached sl
   CC 0–127 against a mixed chain.
 - The UI layout test now includes an SD page showing a 4-slot chain summary.
 
-*Status: host-tested only. This session had no ARM toolchain, so the firmware is compiled by
-CI. **Not yet run on hardware.** To check on the module:*
+*Status: host-tested; the firmware compiles in CI (xPack GCC 13.3.1, no new warnings):
+SRAM 142,708 B (29.0 %), DTCM 62,024 B (47.3 %). This session had no ARM toolchain and couldn't
+download CI artifacts, so **`prebuilt/BluemchenFX.bin` is still the v0.6.0 build** (CI flags it
+as stale). Build locally (`make program-dfu`) or use the CI artifact / a release. **Not yet run
+on hardware.** To check on the module:*
 1. *Your saved setup comes back unchanged after flashing (no settings change in this phase).*
 2. *Old presets 01–09 load as before: into slot 1, slots 2–4 emptied.*
 3. *Copy the new `PRESET10`–`12.TXT` to the card. LOAD SD shows `DEL>REV`, `REV>DEL` and
